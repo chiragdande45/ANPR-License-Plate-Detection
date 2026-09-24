@@ -1,0 +1,44 @@
+# ANPR Phase 1 — Python dependencies
+# Install with:  pip install -r requirements.txt
+#
+# Python 3.9 or later is recommended.
+# GPU (CUDA) is optional but strongly recommended for YOLOv11n training.
+
+# ── Core computer vision ──────────────────────────────────────────────────
+opencv-python==4.9.0.80
+
+# ── Numerical computing ───────────────────────────────────────────────────
+numpy==1.26.4
+
+# ── YOLOv11n detector (Ultralytics) ──────────────────────────────────────
+# Ultralytics 8.2+ ships YOLOv11 (YOLO11) under the name "yolo11n"
+ultralytics==8.2.103
+
+# ── Sauvola adaptive thresholding ────────────────────────────────────────
+# scikit-image provides threshold_sauvola().
+# If this is unavailable, core.py falls back to OpenCV adaptive Gaussian.
+scikit-image==0.23.2
+
+# ── PyTorch (CPU baseline — replace with CUDA wheel for GPU training) ─────
+# For CUDA 11.8:  pip install torch==2.3.1+cu118 torchvision==0.18.1+cu118
+#                 --index-url https://download.pytorch.org/whl/cu118
+# For CUDA 12.1:  pip install torch==2.3.1+cu121 torchvision==0.18.1+cu121
+#                 --index-url https://download.pytorch.org/whl/cu121
+torch==2.3.1
+torchvision==0.18.1
+
+# ── Utilities ─────────────────────────────────────────────────────────────
+# PyYAML is required by Ultralytics for dataset config parsing
+PyYAML==6.0.1
+
+# Pillow is used internally by Ultralytics / torchvision
+Pillow==10.3.0
+
+# matplotlib is used by Ultralytics for training plots
+matplotlib==3.9.0
+
+# tqdm is used by Ultralytics for progress bars
+tqdm==4.66.4
+
+# scipy is used by scikit-image (transitive dependency)
+scipy==1.13.1

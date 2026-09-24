@@ -1,0 +1,30 @@
+{
+  "source_root": "D:\\ind_no_dataset",
+  "output_root": "D:\\ANPR\\dataset_yolo",
+  "check_dir": "D:\\ANPR\\dataset_check",
+  "total_folders_searched": 39,
+  "total_image_files_found": 1698,
+  "total_non_image_ignored": 1698,
+  "non_image_extensions": {
+    ".xml": 1697,
+    ".txt": 1
+  },
+  "images_matched_with_xml": 1698,
+  "images_without_xml": 0,
+  "xml_or_box_issues": 0,
+  "final_usable_images": 1698,
+  "train_count": 1188,
+  "val_count": 339,
+  "test_count": 171,
+  "seed": 42,
+  "split_ratios": {
+    "train": 0.7,
+    "val": 0.2,
+    "test": 0.1
+  },
+  "check_only_mode": false,
+  "write_errors": [],
+  "images_without_xml_list": [],
+  "issues_detail": [],
+  "elapsed_s": 19.88
+}

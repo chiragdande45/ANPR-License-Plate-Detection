@@ -1,0 +1,53 @@
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual environments ──────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── Dataset images and labels (large binary files) ───────────────────────
+# Keep the folder structure (.gitkeep) but exclude actual data
+dataset/train/images/*
+dataset/train/labels/*
+dataset/val/images/*
+dataset/val/labels/*
+dataset/test/images/*
+dataset/test/labels/*
+!dataset/**/.gitkeep
+
+# ── Trained model weights ─────────────────────────────────────────────────
+# Weights are large and should be stored/shared separately (e.g. cloud)
+models/plate_detector/*.pt
+models/plate_detector/*.pth
+models/plate_detector/weights/
+!models/plate_detector/.gitkeep
+
+# ── Ultralytics training runs ─────────────────────────────────────────────
+runs/
+
+# ── Pipeline outputs ──────────────────────────────────────────────────────
+outputs/
+!outputs/batch_report/.gitkeep
+
+# ── Test images ───────────────────────────────────────────────────────────
+test_images/*
+!test_images/.gitkeep
+
+# ── OS / editor artefacts ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace

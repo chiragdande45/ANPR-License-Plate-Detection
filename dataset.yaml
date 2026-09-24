@@ -1,0 +1,25 @@
+# dataset.yaml
+# ============
+# YOLOv11n training configuration — Indian Number Plate Detection
+#
+# Dataset prepared by prepare_dataset.py from:
+#   D:\ind_no_dataset  (Pascal VOC XML annotations)
+#
+# Split: 70% train / 20% val / 10% test  (seed=42)
+#   Train : 1188 images
+#   Val   :  339 images
+#   Test  :  171 images
+#   Total : 1698 images
+#
+# Class: 0 = licence_plate
+
+path: D:/ANPR/dataset_yolo
+
+train: train/images
+val:   val/images
+test:  test/images
+
+nc: 1
+
+names:
+  0: licence_plate

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANPR License Plate Detector</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .upload-box {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-box:hover {
+            border-color: #764ba2;
+            background: #f0f1ff;
+        }
+
+        .upload-box.dragover {
+            border-color: #764ba2;
+            background: #e8e9ff;
+        }
+
+        .upload-box input {
+            display: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .control-group input {
+            width: 100px;
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .results {
+            margin-top: 40px;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .result-image {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .stat-value {
+            color: #333;
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .detections-list {
+            background: #f8f9fa;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .detection {
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .detection:last-child {
+            border-bottom: none;
+        }
+
+        .confidence-badge {
+            background: #28a745;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .confidence-badge.medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .confidence-badge.low {
+            background: #dc3545;
+        }
+
+        .no-detections {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 ANPR License Plate Detector</h1>
+            <p>Upload an image to detect and analyze license plates</p>
+        </div>
+
+        <div class="content">
+            <div id="message" class="message"></div>
+
+            <div class="upload-box" id="uploadBox">
+                <div style="font-size: 3em; margin-bottom: 15px;">📸</div>
+                <h3>Click to upload or drag & drop</h3>
+                <p style="color: #666; margin-top: 10px;">JPG, JPEG, PNG, GIF, BMP (Max 50MB)</p>
+                <input type="file" id="fileInput" accept="image/*">
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label for="confidence">Confidence Threshold:</label>
+                    <input type="number" id="confidence" min="0" max="1" step="0.05" value="0.25">
+                </div>
+                <button class="btn btn-primary" id="testBtn">Test Image</button>
+                <button class="btn btn-secondary" id="clearBtn">Clear</button>
+            </div>
+
+            <div id="results" class="results">
+                <h2 style="margin-bottom: 20px; color: #333;">Detection Results</h2>
+                <img id="resultImage" class="result-image" alt="Result">
+                
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-label">Plates Detected</div>
+                        <div class="stat-value" id="plateCount">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Avg Confidence</div>
+                        <div class="stat-value" id="avgConfidence">0%</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Image Size</div>
+                        <div class="stat-value" id="imageSize">-</div>
+                    </div>
+                </div>
+
+                <div id="detectionsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const testBtn = document.getElementById('testBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const messageEl = document.getElementById('message');
+        const resultsEl = document.getElementById('results');
+        const confidenceInput = document.getElementById('confidence');
+
+        let selectedFile = null;
+
+        // Upload handlers
+        uploadBox.addEventListener('click', () => fileInput.click());
+
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.classList.add('dragover');
+        });
+
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.classList.remove('dragover');
+        });
+
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('Please select a valid image file', 'error');
+                return;
+            }
+            selectedFile = file;
+            showMessage(`Selected: ${file.name}`, 'success');
+        }
+
+        testBtn.addEventListener('click', async () => {
+            if (!selectedFile) {
+                showMessage('Please select an image first', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('confidence', confidenceInput.value);
+
+            showMessage('Testing image...', 'success');
+            testBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/test', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showMessage('Error: ' + data.error, 'error');
+                } else if (data.success) {
+                    displayResults(data);
+                    showMessage('Detection complete!', 'success');
+                } else {
+                    showMessage('Unknown error', 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                testBtn.disabled = false;
+            }
+        });
+
+        function displayResults(data) {
+            resultsEl.classList.add('show');
+            document.getElementById('resultImage').src = data.result_image;
+            document.getElementById('plateCount').textContent = data.detections;
+            document.getElementById('avgConfidence').textContent = (data.avg_confidence * 100).toFixed(1) + '%';
+            document.getElementById('imageSize').textContent = data.image_size;
+
+            const detectionsList = document.getElementById('detectionsList');
+            
+            if (data.detections === 0) {
+                detectionsList.innerHTML = '<div class="no-detections">No license plates detected</div>';
+            } else {
+                let html = '<div class="detections-list">';
+                data.plates.forEach(plate => {
+                    const conf = (plate.confidence * 100).toFixed(1);
+                    let badgeClass = 'success';
+                    if (plate.confidence < 0.6) badgeClass = 'low';
+                    else if (plate.confidence < 0.8) badgeClass = 'medium';
+
+                    html += `
+                        <div class="detection">
+                            <div>
+                                <strong>Plate #${plate.id}</strong>
+                                <p style="color: #666; margin-top: 5px;">Position: (${plate.x1}, ${plate.y1}) to (${plate.x2}, ${plate.y2})</p>
+                                <p style="color: #666;">Size: ${plate.w}×${plate.h} px</p>
+                            </div>
+                            <div class="confidence-badge ${badgeClass}">${conf}%</div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                detectionsList.innerHTML = html;
+            }
+
+            setTimeout(() => resultsEl.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+
+        clearBtn.addEventListener('click', () => {
+            fileInput.value = '';
+            selectedFile = null;
+            resultsEl.classList.remove('show');
+            messageEl.classList.remove('show');
+        });
+
+        function showMessage(text, type) {
+            messageEl.textContent = text;
+            messageEl.className = 'message show ' + type;
+        }
+    </script>
+</body>
+</html>
