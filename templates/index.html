@@ -382,25 +382,69 @@
             if (data.detections === 0) {
                 detectionsList.innerHTML = '<div class="no-detections">No license plates detected</div>';
             } else {
-                let html = '<div class="detections-list">';
+                let html = '';
                 data.plates.forEach(plate => {
                     const conf = (plate.confidence * 100).toFixed(1);
+                    const ocrConf = (plate.ocr.confidence * 100).toFixed(1);
                     let badgeClass = 'success';
                     if (plate.confidence < 0.6) badgeClass = 'low';
                     else if (plate.confidence < 0.8) badgeClass = 'medium';
 
+                    // Cropped plate section
                     html += `
-                        <div class="detection">
-                            <div>
-                                <strong>Plate #${plate.id}</strong>
-                                <p style="color: #666; margin-top: 5px;">Position: (${plate.x1}, ${plate.y1}) to (${plate.x2}, ${plate.y2})</p>
-                                <p style="color: #666;">Size: ${plate.w}×${plate.h} px</p>
+                        <div style="margin-bottom: 30px; border: 2px solid #667eea; border-radius: 10px; overflow: hidden; background: #f8f9fa;">
+                            <div style="background: #667eea; color: white; padding: 15px; font-weight: 600;">
+                                Plate #${plate.id}
                             </div>
-                            <div class="confidence-badge ${badgeClass}">${conf}%</div>
+                            
+                            <div style="padding: 20px;">
+                                <!-- Cropped Plate Image -->
+                                <div style="margin-bottom: 20px;">
+                                    <h4 style="color: #333; margin-bottom: 10px;">Cropped Number Plate</h4>
+                                    <img src="${plate.cropped_image}" style="max-width: 100%; max-height: 150px; border-radius: 8px; border: 1px solid #ddd; background: white; padding: 5px;">
+                                </div>
+                                
+                                <!-- Detection Info -->
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
+                                    <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #667eea;">
+                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Detection Position</div>
+                                        <div style="font-weight: 600; color: #333;">(${plate.x1}, ${plate.y1}) to (${plate.x2}, ${plate.y2})</div>
+                                    </div>
+                                    <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #667eea;">
+                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Detection Confidence</div>
+                                        <div style="font-weight: 600; color: #333;">${conf}%</div>
+                                    </div>
+                                    <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #667eea;">
+                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Plate Size</div>
+                                        <div style="font-weight: 600; color: #333;">${plate.w}×${plate.h} px</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- OCR Results -->
+                                <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
+                                    <h4 style="color: #333; margin-bottom: 12px;">OCR Recognition</h4>
+                                    ${plate.ocr.success ? `
+                                        <div style="margin-bottom: 12px;">
+                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Recognized Text</div>
+                                            <div style="font-size: 1.3em; font-weight: bold; color: #28a745; font-family: monospace;">${plate.ocr.text}</div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">OCR Confidence</div>
+                                            <div style="font-weight: 600; color: #333;">${ocrConf}%</div>
+                                        </div>
+                                        <div style="margin-top: 10px; padding: 8px 12px; background: #e8f5e9; border-radius: 5px; color: #27ae60; font-size: 0.9em;">
+                                            ✓ Valid Indian license plate format
+                                        </div>
+                                    ` : `
+                                        <div style="padding: 12px; background: #fff3cd; border-radius: 5px; color: #856404; text-align: center;">
+                                            ⚠ No text recognized
+                                        </div>
+                                    `}
+                                </div>
+                            </div>
                         </div>
                     `;
                 });
-                html += '</div>';
                 detectionsList.innerHTML = html;
             }
 

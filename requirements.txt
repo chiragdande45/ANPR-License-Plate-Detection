@@ -42,3 +42,9 @@ tqdm==4.66.4
 
 # scipy is used by scikit-image (transitive dependency)
 scipy==1.13.1
+# ── OCR (Optical Character Recognition) ──────────────────────────────────
+# PaddleOCR for license plate character recognition
+# PaddleOCR 3.7 + PaddlePaddle 3.3.1 with enable_mkldnn=False for CPU Windows compatibility
+# See: https://github.com/PaddlePaddle/PaddleOCR/discussions/13052
+paddleocr==3.7
+paddlepaddle==3.3.1
