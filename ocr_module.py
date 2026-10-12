@@ -1,11 +1,25 @@
 """
 PaddleOCR Module for License Plate Recognition
+
+Phase 2.1: Multiple preprocessing variants for comparison
+Phase 2.2: Confidence thresholding + variant selection
+Phase 2.3: OCR text cleaning + Indian plate validation
 """
 
 import os
 import cv2
 import numpy as np
 from paddleocr import PaddleOCR
+from ocr_preprocessing import PlatePreprocessor
+from threshold_and_selection import (
+    VariantSelector,
+    ThresholdConfig,
+    ResultFormatter,
+    ThresholdValidator,
+    ResultStatus
+)
+from ocr_cleaning import TextCleaningPipeline
+from indian_plate_validator import PlateValidator, PlateQualityScorer
 import logging
 
 logging.basicConfig(level=logging.WARNING)
@@ -120,6 +134,135 @@ class PlateOCR:
             print(f"[OCR ERROR] Recognition failed: {e}")
             return {"success": False, "text": "", "confidence": 0.0, "error": str(e)}
     
+    def compare_all_preprocessing_variants(
+        self,
+        plate_image,
+        early_stopping: bool = True,
+        early_stop_threshold: float = None,
+    ):
+        """
+        PHASE 2.1 — Compare all preprocessing variants
+
+        Apply all 5 preprocessing methods to the same cropped plate image
+        and run OCR on each, collecting results for comparison.
+
+        Args:
+            plate_image: Cropped plate region (BGR)
+            early_stopping: If True, stop after the first variant that meets
+                            early_stop_threshold AND passes plate validation.
+                            Default is False (original behaviour — all 5 run).
+            early_stop_threshold: Confidence threshold for early stopping.
+                            If None, uses ThresholdConfig.OCR_CONFIDENCE_THRESHOLD.
+                            Only used when early_stopping=True.
+
+        Returns:
+            Dictionary with comparison results:
+            {
+                "variants": [
+                    {
+                        "method": "baseline",
+                        "description": "...",
+                        "text": "MH12AB1234",
+                        "confidence": 0.91,
+                        "success": True
+                    },
+                    ...
+                ],
+                "best_by_confidence": "baseline",
+                "best_confidence": 0.91,
+                # Early-stopping metadata (always present):
+                "ocr_calls_made": int,
+                "early_stopped": bool,
+                "early_stop_reason": str or None,
+            }
+        """
+        if self.ocr is None:
+            return {"error": "OCR not initialized", "variants": [],
+                    "ocr_calls_made": 0, "early_stopped": False,
+                    "early_stop_reason": None}
+
+        # Resolve early-stop threshold (only used when early_stopping=True)
+        if early_stopping and early_stop_threshold is None:
+            early_stop_threshold = ThresholdConfig.OCR_CONFIDENCE_THRESHOLD
+
+        try:
+            # Get all preprocessing variants
+            all_variants = PlatePreprocessor.get_all_variants(plate_image)
+            descriptions = PlatePreprocessor.get_variant_descriptions()
+
+            results = []
+            best_confidence = 0.0
+            best_method = None
+            ocr_calls_made = 0
+            early_stopped = False
+            early_stop_reason = None
+
+            # Run OCR on each variant
+            for method_name, processed_image in all_variants.items():
+                ocr_result = self.recognize_text(processed_image)
+                ocr_calls_made += 1
+
+                conf = ocr_result.get("confidence", 0.0)
+                text = ocr_result.get("text", "")
+                success = ocr_result.get("success", False)
+
+                result_entry = {
+                    "method": method_name,       # kept for backward compat
+                    "variant": method_name,      # canonical key expected by VariantSelector
+                    "description": descriptions.get(method_name, "Unknown"),
+                    "text": text,
+                    "confidence": conf,
+                    "success": success,
+                }
+                results.append(result_entry)
+
+                # Track best confidence (used for final selection in baseline mode)
+                if conf > best_confidence:
+                    best_confidence = conf
+                    best_method = method_name
+
+                # ── EARLY STOPPING CHECK ─────────────────────────────────────
+                # Only triggered when early_stopping=True.
+                # Condition: ACCEPTED (conf >= threshold) AND validation_valid.
+                # We run inline clean + validate to evaluate the candidate.
+                # The existing VariantSelector / quality scorer still runs
+                # downstream in process_plate_with_cleaning_and_validation —
+                # this check only gates whether we continue to the next variant.
+                if early_stopping and success and conf >= early_stop_threshold:
+                    # Inline clean + validate to confirm plate is usable
+                    cleaning = TextCleaningPipeline.clean_ocr_text(text)
+                    cleaned = cleaning.get("corrected_text", "")
+                    validation = PlateValidator.validate_indian_plate(cleaned)
+                    validation_valid = validation.get("valid", False)
+
+                    if validation_valid:
+                        early_stopped = True
+                        early_stop_reason = (
+                            f"variant={method_name} conf={conf:.4f}>={early_stop_threshold:.4f}"
+                            f" validation=VALID after {ocr_calls_made} call(s)"
+                        )
+                        break
+                    # else: confidence ok but validation failed → try next variant
+
+            return {
+                "variants": results,
+                "best_by_confidence": best_method,
+                "best_confidence": round(best_confidence, 4),
+                "ocr_calls_made": ocr_calls_made,
+                "early_stopped": early_stopped,
+                "early_stop_reason": early_stop_reason,
+            }
+
+        except Exception as e:
+            print(f"[OCR ERROR] Variant comparison failed: {e}")
+            return {
+                "error": str(e),
+                "variants": [],
+                "ocr_calls_made": 0,
+                "early_stopped": False,
+                "early_stop_reason": None,
+            }
+    
     def validate_plate_format(self, text):
         """
         Validate if text matches Indian plate format
@@ -144,6 +287,8 @@ class PlateOCR:
     def process_plate(self, image, bbox, return_crop=False):
         """
         Complete pipeline: extract -> preprocess -> recognize
+        
+        PHASE 1 COMPATIBILITY: Original single-variant pipeline
         
         Args:
             image: Input image
@@ -188,3 +333,300 @@ class PlateOCR:
             ocr_result["cropped_image"] = original_crop
         
         return ocr_result
+    
+    def process_plate_with_cleaning_and_validation(
+        self,
+        image,
+        bbox,
+        return_crop=False,
+        threshold=None,
+        return_all_variants=True,
+        early_stopping=True,
+    ):
+        """
+        PHASE 2.3: Process plate with variant selection + cleaning + validation
+
+        Pipeline:
+        1. Extract plate region
+        2. Run all 5 preprocessing variants (or fewer if early_stopping=True)
+        3. Collect OCR results from each variant
+        4. Select variant with highest confidence
+        5. Apply confidence threshold (default: 0.85)
+        6. CLEAN OCR text (normalize + character correction)
+        7. VALIDATE against Indian plate format
+        8. Return structured result with raw, cleaned, final text
+
+        Args:
+            image: Input image
+            bbox: Bounding box [x1, y1, x2, y2]
+            return_crop: If True, also return the cropped plate image
+            threshold: Confidence threshold (default: 0.85 from config)
+            return_all_variants: If True, include all variant results in response
+            early_stopping: If True, stop after the first variant that meets
+                            the confidence threshold AND passes plate validation.
+                            Default is False (original behaviour — all 5 variants run).
+
+        Returns:
+            Dictionary with:
+            {
+                "success": bool,
+                "raw_text": str,
+                "cleaned_text": str,
+                "final_text": str,
+                "confidence": float,
+                "variant_used": str,
+                "status": str (ACCEPTED, LOW_CONFIDENCE, OCR_FAILED, DETECTION_FAILED),
+                "validation_status": str,
+                "validation_valid": bool,
+                "state_code": str or None,
+                "quality_score": float,
+                "quality_tier": str,
+                "corrections_made": int,
+                "correction_confidence": float,
+                "is_valid_format": bool,
+                "all_variants": [list],
+                "cropped_image": optional,
+                # Early-stopping metadata (always present):
+                "ocr_calls_made": int,
+                "early_stopped": bool,
+                "early_stop_reason": str or None,
+            }
+        """
+        x1, y1, x2, y2 = map(int, bbox)
+        
+        # Extract plate region
+        plate_region = image[y1:y2, x1:x2]
+        
+        if plate_region.size == 0:
+            return {
+                "success": False,
+                "raw_text": "",
+                "cleaned_text": "",
+                "final_text": "",
+                "confidence": 0.0,
+                "variant_used": None,
+                "status": ResultStatus.DETECTION_FAILED.value,
+                "validation_status": "EMPTY",
+                "validation_valid": False,
+                "state_code": None,
+                "quality_score": 0.0,
+                "quality_tier": "VERY_POOR",
+                "corrections_made": 0,
+                "correction_confidence": 0.0,
+                "is_valid_format": False,
+                "all_variants": [],
+                "error": "Could not extract plate region",
+                "cropped_image": None
+            }
+        
+        # Store original crop for UI display
+        original_crop = plate_region.copy()
+        
+        # Add 5% synthetic grey padding to the OCR input to prevent edge-character cutoff
+        pad_x = max(2, int(plate_region.shape[1] * 0.05))
+        pad_y = max(2, int(plate_region.shape[0] * 0.05))
+        plate_region = cv2.copyMakeBorder(
+            plate_region, pad_y, pad_y, pad_x, pad_x, 
+            cv2.BORDER_CONSTANT, value=[127, 127, 127]
+        )
+        
+        # Validate threshold
+        if threshold is None:
+            threshold = ThresholdConfig.OCR_CONFIDENCE_THRESHOLD
+        else:
+            threshold = ThresholdValidator.validate_threshold(threshold)
+        
+        # Get all preprocessing variants and run OCR on each
+        comparison = self.compare_all_preprocessing_variants(
+            plate_region,
+            early_stopping=early_stopping,
+            early_stop_threshold=threshold,
+        )
+        
+        # Check for errors in comparison
+        if "error" in comparison:
+            return {
+                "success": False,
+                "raw_text": "",
+                "cleaned_text": "",
+                "final_text": "",
+                "confidence": 0.0,
+                "variant_used": None,
+                "status": ResultStatus.OCR_FAILED.value,
+                "validation_status": "EMPTY",
+                "validation_valid": False,
+                "state_code": None,
+                "quality_score": 0.0,
+                "quality_tier": "VERY_POOR",
+                "corrections_made": 0,
+                "correction_confidence": 0.0,
+                "is_valid_format": False,
+                "all_variants": comparison.get("variants", []),
+                "error": comparison.get("error"),
+                "cropped_image": original_crop if return_crop else None,
+                "ocr_calls_made": comparison.get("ocr_calls_made", 0),
+                "early_stopped": False,
+                "early_stop_reason": None,
+            }
+        
+        # Select best variant based on threshold
+        selection = VariantSelector.select_best_variant(comparison, threshold)
+        
+        selected_result = selection.get("selected_result", {})
+        all_variants = selection.get("all_variants", [])
+        
+        raw_text = selected_result.get("text", "")
+        ocr_confidence = selected_result.get("confidence", 0.0)
+        variant_used = selected_result.get("variant_used")
+        ocr_status = selected_result.get("status")
+        
+        # PHASE 2.3: Clean and validate text
+        cleaning_result = TextCleaningPipeline.clean_ocr_text(raw_text)
+        cleaned_text = cleaning_result.get("corrected_text", "")
+        corrections_made = cleaning_result.get("corrections_made", 0)
+        correction_confidence = cleaning_result.get("correction_confidence", 1.0)
+        
+        # Validate against Indian plate format
+        validation_result = PlateValidator.validate_indian_plate(cleaned_text)
+        validation_valid = validation_result.get("valid", False)
+        validation_status = validation_result.get("validation_status", "EMPTY")
+        state_code = validation_result.get("state_code")
+        
+        # Determine final text
+        # Use cleaned text if valid, otherwise cleaned text anyway but mark as invalid
+        final_text = cleaned_text if validation_valid else cleaned_text
+        
+        # Score overall quality
+        quality_result = PlateQualityScorer.score_plate_quality(
+            final_text,
+            ocr_confidence,
+            validation_result,
+            corrections_made,
+            correction_confidence
+        )
+        
+        # Build result
+        result = {
+            "success": ocr_status == ResultStatus.ACCEPTED.value and validation_valid,
+            "raw_text": raw_text,
+            "cleaned_text": cleaned_text,
+            "final_text": final_text,
+            "confidence": ocr_confidence,
+            "variant_used": variant_used,
+            "status": ocr_status,
+            "validation_status": validation_status,
+            "validation_valid": validation_valid,
+            "state_code": state_code,
+            "quality_score": quality_result.get("total_score", 0.0),
+            "quality_tier": quality_result.get("quality_tier", "VERY_POOR"),
+            "corrections_made": corrections_made,
+            "correction_confidence": correction_confidence,
+            "is_valid_format": validation_valid,
+            "threshold_used": threshold,
+            "variants_above_threshold": selection.get("variants_above_threshold", 0),
+            # Early-stopping metadata — always present; False/0 in baseline mode
+            "ocr_calls_made": comparison.get("ocr_calls_made", 5),
+            "early_stopped": comparison.get("early_stopped", False),
+            "early_stop_reason": comparison.get("early_stop_reason", None),
+        }
+        
+        # Include all variants if requested
+        if return_all_variants:
+            result["all_variants"] = all_variants
+        
+        # Include cropped image if requested
+        if return_crop:
+            result["cropped_image"] = original_crop
+        
+        # ── SMALL-CROP RECOVERY ──────────────────────────────────────────────
+        # When the normal pipeline did NOT produce a valid plate, attempt one
+        # additional OCR pass with stronger preprocessing (pad + 4× + CLAHE).
+        # Triggered only when:
+        #   - validation_valid is False, OR
+        #   - recognized text is suspiciously short (< 5 chars)
+        # Does NOT weaken validation — recovery result is only accepted when
+        # validation_valid=True on the recovered text.
+        if not validation_valid or len(cleaned_text) < 5:
+            recovery = self._recover_small_crop(
+                plate_region,
+                threshold,
+                base_variant=variant_used,
+                base_calls=comparison.get("ocr_calls_made", 5)
+            )
+            if recovery is not None:
+                result.update(recovery)
+                if return_all_variants and "all_variants" not in result:
+                    result["all_variants"] = all_variants
+                if return_crop:
+                    result["cropped_image"] = original_crop
+
+        return result
+
+    def _recover_small_crop(self, plate_region, threshold, base_variant=None, base_calls=5):
+        """
+        Recovery pass for small or partial-read crops.
+        Applies: 10% padding + 4x Lanczos upscale + CLAHE.
+        Returns a partial result dict only when recovery produces a VALID plate;
+        otherwise returns None (caller keeps original result unchanged).
+        """
+        try:
+            ph = max(4, int(plate_region.shape[0] * 0.10))
+            pw = max(4, int(plate_region.shape[1] * 0.10))
+            padded = cv2.copyMakeBorder(
+                plate_region, ph, ph, pw, pw, cv2.BORDER_REPLICATE
+            )
+            nh = padded.shape[0] * 4
+            nw = padded.shape[1] * 4
+            upscaled = cv2.resize(padded, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
+
+            lab = cv2.cvtColor(upscaled, cv2.COLOR_BGR2LAB)
+            l_ch, a_ch, b_ch = cv2.split(lab)
+            l_ch = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(l_ch)
+            recovered_img = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]),
+                                         cv2.COLOR_LAB2BGR)
+
+            ocr_r   = self.recognize_text(recovered_img)
+            rec_txt = ocr_r.get("text", "")
+            rec_cf  = ocr_r.get("confidence", 0.0)
+
+            cleaning = TextCleaningPipeline.clean_ocr_text(rec_txt)
+            cleaned  = cleaning.get("corrected_text", "")
+            val      = PlateValidator.validate_indian_plate(cleaned)
+
+            if not val.get("valid", False):
+                return None
+
+            corr_made = cleaning.get("corrections_made", 0)
+            corr_conf = cleaning.get("correction_confidence", 1.0)
+            quality   = PlateQualityScorer.score_plate_quality(
+                cleaned, rec_cf, val, corr_made, corr_conf
+            )
+
+            return {
+                "success":               rec_cf >= threshold,
+                "raw_text":              rec_txt,
+                "cleaned_text":          cleaned,
+                "final_text":            cleaned,
+                "confidence":            round(float(rec_cf), 4),
+                "variant_used":          base_variant or "baseline",
+                "recovery_applied":      True,
+                "recovery_variant":      "recovery_pad4x_clahe",
+                "status":                ResultStatus.ACCEPTED.value
+                                         if rec_cf >= threshold
+                                         else ResultStatus.LOW_CONFIDENCE.value,
+                "validation_status":     val["validation_status"],
+                "validation_valid":      True,
+                "state_code":            val.get("state_code"),
+                "quality_score":         quality.get("total_score", 0.0),
+                "quality_tier":          quality.get("quality_tier", "GOOD"),
+                "corrections_made":      corr_made,
+                "correction_confidence": corr_conf,
+                "is_valid_format":       True,
+                "ocr_calls_made":        base_calls + 1,
+                "early_stopped":         False,
+                "early_stop_reason":     None,
+            }
+
+        except Exception as e:
+            print(f"[OCR RECOVERY] Failed: {e}")
+            return None

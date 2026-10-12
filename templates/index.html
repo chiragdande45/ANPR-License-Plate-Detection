@@ -19,7 +19,7 @@
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1050px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
@@ -30,32 +30,33 @@
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 40px;
+            padding: 35px 25px;
             text-align: center;
         }
 
         .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-size: 2.3em;
+            margin-bottom: 8px;
         }
 
         .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
+            font-size: 1.05em;
+            opacity: 0.95;
         }
 
         .content {
-            padding: 40px;
+            padding: 35px;
         }
 
         .upload-box {
             border: 3px dashed #667eea;
-            border-radius: 10px;
-            padding: 40px;
+            border-radius: 12px;
+            padding: 35px 20px;
             text-align: center;
             background: #f8f9ff;
             cursor: pointer;
             transition: all 0.3s ease;
+            position: relative;
         }
 
         .upload-box:hover {
@@ -64,18 +65,87 @@
         }
 
         .upload-box.dragover {
-            border-color: #764ba2;
-            background: #e8e9ff;
+            border-color: #28a745;
+            background: #e8f9ee;
+            transform: scale(1.01);
         }
 
         .upload-box input {
             display: none;
         }
 
+        .selected-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+            max-height: 250px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #fbfbfd;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+
+        .preview-item {
+            position: relative;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .preview-item img {
+            width: 100%;
+            height: 85px;
+            object-fit: cover;
+        }
+
+        .preview-item .preview-name {
+            font-size: 0.75em;
+            padding: 4px 6px;
+            color: #444;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: #fdfdfd;
+        }
+
+        .preview-item .remove-btn {
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            line-height: 18px;
+            cursor: pointer;
+            text-align: center;
+            font-weight: bold;
+        }
+
         .controls {
             display: flex;
             gap: 15px;
-            margin: 20px 0;
+            margin: 25px 0 15px 0;
             flex-wrap: wrap;
             align-items: center;
         }
@@ -92,16 +162,17 @@
         }
 
         .control-group input {
-            width: 100px;
+            width: 90px;
             padding: 8px 12px;
             border: 2px solid #ddd;
             border-radius: 5px;
+            font-size: 0.95em;
         }
 
         .btn {
-            padding: 12px 30px;
+            padding: 12px 28px;
             border: none;
-            border-radius: 5px;
+            border-radius: 6px;
             font-size: 1em;
             font-weight: 600;
             cursor: pointer;
@@ -113,26 +184,31 @@
             color: white;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
         }
 
         .btn-primary:disabled {
-            opacity: 0.5;
+            opacity: 0.6;
             cursor: not-allowed;
         }
 
         .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
+            background: #edf2f7;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
         }
 
         .message {
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 15px 0;
             display: none;
+            font-weight: 500;
         }
 
         .message.show {
@@ -151,89 +227,159 @@
             border: 1px solid #f5c6cb;
         }
 
-        .results {
-            margin-top: 40px;
+        .message.info {
+            background: #e2e3e5;
+            color: #383d41;
+            border: 1px solid #d6d8db;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 10px;
+            background: #e2e8f0;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 15px 0;
             display: none;
         }
 
-        .results.show {
-            display: block;
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+        }
+
+        .card-result {
+            margin-top: 35px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #ffffff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .card-header h3 {
+            font-size: 1.15em;
+            word-break: break-all;
+        }
+
+        .card-body {
+            padding: 24px;
         }
 
         .result-image {
             max-width: 100%;
-            max-height: 500px;
-            border-radius: 10px;
-            margin: 20px 0;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            max-height: 480px;
+            border-radius: 8px;
+            margin: 15px 0 25px 0;
+            display: block;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
             margin: 20px 0;
         }
 
         .stat {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
+            background: #f8fafc;
+            padding: 16px;
+            border-radius: 8px;
             border-left: 4px solid #667eea;
         }
 
         .stat-label {
-            color: #666;
-            font-size: 0.9em;
-        }
-
-        .stat-value {
-            color: #333;
-            font-size: 1.8em;
-            font-weight: bold;
-        }
-
-        .detections-list {
-            background: #f8f9fa;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        .detection {
-            padding: 15px;
-            border-bottom: 1px solid #ddd;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .detection:last-child {
-            border-bottom: none;
-        }
-
-        .confidence-badge {
-            background: #28a745;
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
+            color: #718096;
+            font-size: 0.85em;
+            text-transform: uppercase;
             font-weight: 600;
         }
 
-        .confidence-badge.medium {
-            background: #ffc107;
-            color: #333;
-        }
-
-        .confidence-badge.low {
-            background: #dc3545;
+        .stat-value {
+            color: #2d3748;
+            font-size: 1.6em;
+            font-weight: bold;
+            margin-top: 4px;
         }
 
         .no-detections {
             text-align: center;
             padding: 30px;
-            color: #666;
-            background: #f8f9fa;
+            color: #718096;
+            background: #f7fafc;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .plate-box {
+            margin-bottom: 25px;
+            border: 2px solid #667eea;
             border-radius: 10px;
+            overflow: hidden;
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+
+        .plate-box-header {
+            background: #667eea;
+            color: white;
+            padding: 12px 18px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .plate-box-content {
+            padding: 20px;
+        }
+
+        .variant-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.88em;
+        }
+
+        .variant-table th, .variant-table td {
+            border: 1px solid #e2e8f0;
+            padding: 8px 10px;
+            text-align: left;
+        }
+
+        .variant-table th {
+            background: #edf2f7;
+            color: #4a5568;
+        }
+
+        .btn-toggle-variants {
+            background: #edf2f7;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            padding: 6px 14px;
+            font-size: 0.85em;
+            cursor: pointer;
+            font-weight: 600;
+            color: #4a5568;
+            margin-top: 10px;
+        }
+
+        .btn-toggle-variants:hover {
+            background: #e2e8f0;
         }
     </style>
 </head>
@@ -241,49 +387,35 @@
     <div class="container">
         <div class="header">
             <h1>🚗 ANPR License Plate Detector</h1>
-            <p>Upload an image to detect and analyze license plates</p>
+            <p>Upload single or multiple images to detect and analyze license plates</p>
         </div>
 
         <div class="content">
             <div id="message" class="message"></div>
+            <div id="progressBarContainer" class="progress-bar-container">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
 
             <div class="upload-box" id="uploadBox">
-                <div style="font-size: 3em; margin-bottom: 15px;">📸</div>
-                <h3>Click to upload or drag & drop</h3>
-                <p style="color: #666; margin-top: 10px;">JPG, JPEG, PNG, GIF, BMP (Max 50MB)</p>
-                <input type="file" id="fileInput" accept="image/*">
+                <div style="font-size: 3em; margin-bottom: 10px;">📸</div>
+                <h3>Click to upload or drag & drop image(s)</h3>
+                <p style="color: #666; margin-top: 6px;">Select one or multiple images (JPG, JPEG, PNG, BMP, WEBP)</p>
+                <div id="selectedCountBadge" class="selected-badge" style="display: none;">0 images selected</div>
+                <input type="file" id="fileInput" accept="image/*,.jpg,.jpeg,.png,.bmp,.webp" multiple>
             </div>
+
+            <div id="previewGrid" class="preview-grid" style="display: none;"></div>
 
             <div class="controls">
                 <div class="control-group">
                     <label for="confidence">Confidence Threshold:</label>
                     <input type="number" id="confidence" min="0" max="1" step="0.05" value="0.25">
                 </div>
-                <button class="btn btn-primary" id="testBtn">Test Image</button>
-                <button class="btn btn-secondary" id="clearBtn">Clear</button>
+                <button class="btn btn-primary" id="testBtn">Test Images</button>
+                <button class="btn btn-secondary" id="clearBtn">Clear All</button>
             </div>
 
-            <div id="results" class="results">
-                <h2 style="margin-bottom: 20px; color: #333;">Detection Results</h2>
-                <img id="resultImage" class="result-image" alt="Result">
-                
-                <div class="stats">
-                    <div class="stat">
-                        <div class="stat-label">Plates Detected</div>
-                        <div class="stat-value" id="plateCount">0</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">Avg Confidence</div>
-                        <div class="stat-value" id="avgConfidence">0%</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">Image Size</div>
-                        <div class="stat-value" id="imageSize">-</div>
-                    </div>
-                </div>
-
-                <div id="detectionsList"></div>
-            </div>
+            <div id="allResultsContainer"></div>
         </div>
     </div>
 
@@ -293,174 +425,366 @@
         const testBtn = document.getElementById('testBtn');
         const clearBtn = document.getElementById('clearBtn');
         const messageEl = document.getElementById('message');
-        const resultsEl = document.getElementById('results');
+        const previewGrid = document.getElementById('previewGrid');
+        const selectedCountBadge = document.getElementById('selectedCountBadge');
+        const allResultsContainer = document.getElementById('allResultsContainer');
         const confidenceInput = document.getElementById('confidence');
+        const progressBarContainer = document.getElementById('progressBarContainer');
+        const progressBar = document.getElementById('progressBar');
 
-        let selectedFile = null;
+        let selectedFiles = [];
 
-        // Upload handlers
-        uploadBox.addEventListener('click', () => fileInput.click());
+        function isImageFile(file) {
+            if (file.type && file.type.startsWith('image/')) return true;
+            const ext = file.name.split('.').pop().toLowerCase();
+            return ['jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif', 'tiff'].includes(ext);
+        }
+
+        function updateSelectionUI() {
+            previewGrid.innerHTML = '';
+            if (selectedFiles.length === 0) {
+                previewGrid.style.display = 'none';
+                selectedCountBadge.style.display = 'none';
+                return;
+            }
+
+            selectedCountBadge.style.display = 'inline-block';
+            selectedCountBadge.textContent = `${selectedFiles.length} image${selectedFiles.length > 1 ? 's' : ''} selected`;
+            previewGrid.style.display = 'grid';
+
+            selectedFiles.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'preview-item';
+
+                const img = document.createElement('img');
+                img.alt = file.name;
+                const objectUrl = URL.createObjectURL(file);
+                img.src = objectUrl;
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'preview-name';
+                nameDiv.textContent = file.name;
+                nameDiv.title = file.name;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-btn';
+                removeBtn.innerHTML = '×';
+                removeBtn.title = 'Remove';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    URL.revokeObjectURL(objectUrl);
+                    selectedFiles.splice(index, 1);
+                    updateSelectionUI();
+                };
+
+                item.appendChild(removeBtn);
+                item.appendChild(img);
+                item.appendChild(nameDiv);
+                previewGrid.appendChild(item);
+            });
+        }
+
+        function addFiles(files) {
+            const newFiles = Array.from(files).filter(isImageFile);
+            if (newFiles.length === 0) {
+                showMessage('No valid image files found', 'error');
+                return;
+            }
+
+            // Append unique files by name and size
+            for (const nf of newFiles) {
+                const exists = selectedFiles.some(f => f.name === nf.name && f.size === nf.size);
+                if (!exists) {
+                    selectedFiles.push(nf);
+                }
+            }
+
+            updateSelectionUI();
+            showMessage(`Selected ${selectedFiles.length} image(s)`, 'success');
+        }
+
+        uploadBox.addEventListener('click', () => {
+            fileInput.value = '';
+            fileInput.click();
+        });
 
         uploadBox.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadBox.classList.add('dragover');
         });
 
-        uploadBox.addEventListener('dragleave', () => {
+        uploadBox.addEventListener('dragleave', (e) => {
             uploadBox.classList.remove('dragover');
         });
 
         uploadBox.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadBox.classList.remove('dragover');
-            if (e.dataTransfer.files.length > 0) {
-                fileInput.files = e.dataTransfer.files;
-                handleFile(e.dataTransfer.files[0]);
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                addFiles(e.dataTransfer.files);
             }
         });
 
         fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
+            if (e.target.files && e.target.files.length > 0) {
+                addFiles(e.target.files);
             }
         });
 
-        function handleFile(file) {
-            if (!file.type.startsWith('image/')) {
-                showMessage('Please select a valid image file', 'error');
-                return;
-            }
-            selectedFile = file;
-            showMessage(`Selected: ${file.name}`, 'success');
+        function toggleVariants(button) {
+            const variantsList = button.nextElementSibling;
+            const isHidden = variantsList.style.display === 'none';
+            variantsList.style.display = isHidden ? 'block' : 'none';
+            button.textContent = isHidden ? '▲ Hide All Variants' : '▼ Show All Variants';
         }
 
         testBtn.addEventListener('click', async () => {
-            if (!selectedFile) {
-                showMessage('Please select an image first', 'error');
+            if (selectedFiles.length === 0) {
+                showMessage('Please select at least one image first', 'error');
                 return;
             }
 
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            formData.append('confidence', confidenceInput.value);
-
-            showMessage('Testing image...', 'success');
             testBtn.disabled = true;
+            allResultsContainer.innerHTML = '';
+            progressBarContainer.style.display = 'block';
+            progressBar.style.width = '0%';
 
-            try {
-                const response = await fetch('/api/test', {
-                    method: 'POST',
-                    body: formData
-                });
+            const total = selectedFiles.length;
+            let successCount = 0;
 
-                const data = await response.json();
+            for (let i = 0; i < total; i++) {
+                const file = selectedFiles[i];
+                const pct = Math.round(((i) / total) * 100);
+                progressBar.style.width = pct + '%';
+                showMessage(`Processing image ${i + 1} of ${total}: ${file.name}...`, 'info');
 
-                if (data.error) {
-                    showMessage('Error: ' + data.error, 'error');
-                } else if (data.success) {
-                    displayResults(data);
-                    showMessage('Detection complete!', 'success');
-                } else {
-                    showMessage('Unknown error', 'error');
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('confidence', confidenceInput.value);
+
+                try {
+                    const response = await fetch('/api/test', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+                        displayError(file.name, errData.error || `Server returned error ${response.status}`);
+                    } else {
+                        const data = await response.json();
+                        if (data.error) {
+                            displayError(file.name, data.error);
+                        } else {
+                            displayResults(file.name, i + 1, data);
+                            successCount++;
+                        }
+                    }
+                } catch (err) {
+                    displayError(file.name, 'Network error: ' + err.message);
                 }
-            } catch (error) {
-                showMessage('Error: ' + error.message, 'error');
-            } finally {
-                testBtn.disabled = false;
             }
+
+            progressBar.style.width = '100%';
+            setTimeout(() => {
+                progressBarContainer.style.display = 'none';
+            }, 1000);
+
+            testBtn.disabled = false;
+            showMessage(`Done! Successfully processed ${successCount} of ${total} image(s).`, successCount === total ? 'success' : 'info');
         });
 
-        function displayResults(data) {
-            resultsEl.classList.add('show');
-            document.getElementById('resultImage').src = data.result_image;
-            document.getElementById('plateCount').textContent = data.detections;
-            document.getElementById('avgConfidence').textContent = (data.avg_confidence * 100).toFixed(1) + '%';
-            document.getElementById('imageSize').textContent = data.image_size;
+        function displayError(filename, err) {
+            const div = document.createElement('div');
+            div.className = 'card-result';
+            div.innerHTML = `
+                <div class="card-header" style="background: #dc3545;">
+                    <h3>${escapeHtml(filename)}</h3>
+                    <span>FAILED</span>
+                </div>
+                <div class="card-body">
+                    <p style="color: #dc3545; font-weight: 600;">Error: ${escapeHtml(err)}</p>
+                </div>
+            `;
+            allResultsContainer.appendChild(div);
+        }
 
-            const detectionsList = document.getElementById('detectionsList');
-            
-            if (data.detections === 0) {
-                detectionsList.innerHTML = '<div class="no-detections">No license plates detected</div>';
+        function displayResults(filename, itemNum, data) {
+            const card = document.createElement('div');
+            card.className = 'card-result';
+
+            let avgConfFormatted = (data.avg_confidence * 100).toFixed(1);
+            let detectionsCount = data.detections || 0;
+
+            let html = `
+                <div class="card-header">
+                    <h3>#${itemNum} — ${escapeHtml(filename)}</h3>
+                    <span style="font-size: 0.9em; opacity: 0.9;">${detectionsCount} Plate${detectionsCount !== 1 ? 's' : ''} Detected</span>
+                </div>
+                <div class="card-body">
+                    <img src="${data.result_image}" class="result-image" alt="Detection Result">
+
+                    <div class="stats">
+                        <div class="stat">
+                            <div class="stat-label">Plates Detected</div>
+                            <div class="stat-value">${detectionsCount}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Avg Confidence</div>
+                            <div class="stat-value">${avgConfFormatted}%</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Image Size</div>
+                            <div class="stat-value">${escapeHtml(data.image_size || 'N/A')}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Recognized</div>
+                            <div class="stat-value">${data.recognized_count || 0}</div>
+                        </div>
+                    </div>
+            `;
+
+            let detectionsHtml = '';
+            if (!data.plates || data.plates.length === 0) {
+                detectionsHtml = '<div class="no-detections">No license plates detected in this image.</div>';
             } else {
-                let html = '';
                 data.plates.forEach(plate => {
                     const conf = (plate.confidence * 100).toFixed(1);
-                    const ocrConf = (plate.ocr.confidence * 100).toFixed(1);
-                    let badgeClass = 'success';
-                    if (plate.confidence < 0.6) badgeClass = 'low';
-                    else if (plate.confidence < 0.8) badgeClass = 'medium';
+                    const ocr = plate.ocr || {};
+                    const ocrConf = ((ocr.confidence || 0) * 100).toFixed(1);
+                    const status = ocr.status || 'UNKNOWN';
 
-                    // Cropped plate section
-                    html += `
-                        <div style="margin-bottom: 30px; border: 2px solid #667eea; border-radius: 10px; overflow: hidden; background: #f8f9fa;">
-                            <div style="background: #667eea; color: white; padding: 15px; font-weight: 600;">
-                                Plate #${plate.id}
+                    let badgeColor = '#28a745';
+                    let statusLabel = '✓ ACCEPTED';
+                    if (status === 'LOW_CONFIDENCE') {
+                        badgeColor = '#ffc107';
+                        statusLabel = '⚠ LOW CONFIDENCE';
+                    } else if (status === 'OCR_FAILED' || status === 'FAILED') {
+                        badgeColor = '#dc3545';
+                        statusLabel = '✗ OCR FAILED';
+                    } else if (status === 'DETECTION_FAILED') {
+                        badgeColor = '#6c757d';
+                        statusLabel = '✗ DETECTION FAILED';
+                    }
+
+                    // Variants table if present
+                    let variantsHtml = '';
+                    if (ocr.all_variants && ocr.all_variants.length > 0) {
+                        let rows = '';
+                        ocr.all_variants.forEach((v, idx) => {
+                            const isSelected = v.name === ocr.variant_used || (ocr.recovery_applied && v.name === ocr.recovery_variant);
+                            rows += `
+                                <tr style="${isSelected ? 'background: #e6fffa; font-weight: bold;' : ''}">
+                                    <td>${idx + 1}</td>
+                                    <td>${escapeHtml(v.name || 'default')}</td>
+                                    <td><code>${escapeHtml(v.text || '-')}</code></td>
+                                    <td>${((v.confidence || 0) * 100).toFixed(1)}%</td>
+                                    <td>${v.is_valid_format ? '✓ Yes' : '✗ No'}</td>
+                                    <td>${isSelected ? '★ SELECTED' : ''}</td>
+                                </tr>
+                            `;
+                        });
+
+                        variantsHtml = `
+                            <button class="btn-toggle-variants" onclick="toggleVariants(this)">▼ Show All Variants (${ocr.all_variants.length})</button>
+                            <div style="display: none; margin-top: 10px; overflow-x: auto;">
+                                <table class="variant-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Preprocessing Variant</th>
+                                            <th>Text</th>
+                                            <th>Confidence</th>
+                                            <th>Valid Format</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${rows}
+                                    </tbody>
+                                </table>
                             </div>
-                            
-                            <div style="padding: 20px;">
-                                <!-- Cropped Plate Image -->
-                                <div style="margin-bottom: 20px;">
-                                    <h4 style="color: #333; margin-bottom: 10px;">Cropped Number Plate</h4>
-                                    <img src="${plate.cropped_image}" style="max-width: 100%; max-height: 150px; border-radius: 8px; border: 1px solid #ddd; background: white; padding: 5px;">
-                                </div>
-                                
-                                <!-- Detection Info -->
-                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
-                                    <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #667eea;">
-                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Detection Position</div>
-                                        <div style="font-weight: 600; color: #333;">(${plate.x1}, ${plate.y1}) to (${plate.x2}, ${plate.y2})</div>
-                                    </div>
-                                    <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #667eea;">
-                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Detection Confidence</div>
-                                        <div style="font-weight: 600; color: #333;">${conf}%</div>
-                                    </div>
-                                    <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #667eea;">
-                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Plate Size</div>
-                                        <div style="font-weight: 600; color: #333;">${plate.w}×${plate.h} px</div>
-                                    </div>
-                                </div>
-                                
-                                <!-- OCR Results -->
-                                <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
-                                    <h4 style="color: #333; margin-bottom: 12px;">OCR Recognition</h4>
-                                    ${plate.ocr.success ? `
-                                        <div style="margin-bottom: 12px;">
-                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Recognized Text</div>
-                                            <div style="font-size: 1.3em; font-weight: bold; color: #28a745; font-family: monospace;">${plate.ocr.text}</div>
-                                        </div>
+                        `;
+                    }
+
+                    detectionsHtml += `
+                        <div class="plate-box">
+                            <div class="plate-box-header">
+                                <span>Plate #${plate.id}</span>
+                                <span>YOLO Conf: ${conf}%</span>
+                            </div>
+                            <div class="plate-box-content">
+                                <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 18px;">
+                                    ${plate.cropped_image ? `
                                         <div>
-                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">OCR Confidence</div>
-                                            <div style="font-weight: 600; color: #333;">${ocrConf}%</div>
+                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px; font-weight: 600;">Cropped Plate:</div>
+                                            <img src="${plate.cropped_image}" style="max-height: 80px; border: 1px solid #ddd; border-radius: 4px; padding: 2px; background: #fafafa;">
                                         </div>
-                                        <div style="margin-top: 10px; padding: 8px 12px; background: #e8f5e9; border-radius: 5px; color: #27ae60; font-size: 0.9em;">
-                                            ✓ Valid Indian license plate format
+                                    ` : ''}
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+                                            <span style="background: ${badgeColor}; color: ${badgeColor === '#ffc107' ? '#222' : '#fff'}; padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold;">
+                                                ${statusLabel}
+                                            </span>
+                                            ${ocr.state_code ? `
+                                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: 600;">
+                                                    State: ${escapeHtml(ocr.state_code)}
+                                                </span>
+                                            ` : ''}
+                                            ${ocr.quality_tier ? `
+                                                <span style="background: #edf2f7; color: #4a5568; padding: 4px 10px; border-radius: 4px; font-size: 0.85em;">
+                                                    Quality: ${escapeHtml(ocr.quality_tier)}
+                                                </span>
+                                            ` : ''}
                                         </div>
-                                    ` : `
-                                        <div style="padding: 12px; background: #fff3cd; border-radius: 5px; color: #856404; text-align: center;">
-                                            ⚠ No text recognized
+
+                                        <div style="background: #f7fafc; padding: 12px 16px; border-radius: 6px; border-left: 4px solid #667eea;">
+                                            <div style="font-size: 0.8em; color: #718096; text-transform: uppercase; font-weight: 600;">Recognized License Plate</div>
+                                            <div style="font-size: 1.6em; font-weight: bold; font-family: monospace; color: #2d3748; letter-spacing: 1.5px; margin: 4px 0;">
+                                                ${escapeHtml(ocr.text || ocr.final_text || '(No text)')}
+                                            </div>
+                                            <div style="font-size: 0.85em; color: #4a5568;">
+                                                OCR Confidence: <strong>${ocrConf}%</strong>
+                                                ${ocr.variant_used ? ` &bull; Pipeline: <em>${escapeHtml(ocr.variant_used)}</em>` : ''}
+                                                ${ocr.recovery_applied ? ` <span style="color: #2b6cb0; font-weight: 600;">(Recovery Applied)</span>` : ''}
+                                            </div>
                                         </div>
-                                    `}
+                                    </div>
                                 </div>
+
+                                ${variantsHtml}
                             </div>
                         </div>
                     `;
                 });
-                detectionsList.innerHTML = html;
             }
 
-            setTimeout(() => resultsEl.scrollIntoView({ behavior: 'smooth' }), 100);
+            card.innerHTML = html + detectionsHtml + `</div>`;
+            allResultsContainer.appendChild(card);
+            card.scrollIntoView({ behavior: 'smooth' });
         }
 
         clearBtn.addEventListener('click', () => {
             fileInput.value = '';
-            selectedFile = null;
-            resultsEl.classList.remove('show');
+            selectedFiles = [];
+            allResultsContainer.innerHTML = '';
             messageEl.classList.remove('show');
+            updateSelectionUI();
         });
 
         function showMessage(text, type) {
             messageEl.textContent = text;
             messageEl.className = 'message show ' + type;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
     </script>
 </body>

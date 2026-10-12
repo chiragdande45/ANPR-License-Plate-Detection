@@ -188,6 +188,93 @@ def detect_plate(model, image_bgr, conf_threshold=0.25, target_size=640):
     return result_dict
 
 
+def detect_all_plates(model, image_bgr, conf_threshold=0.25, target_size=640):
+    """
+    Detect ALL plates in image (not just the best one).
+    
+    This is the multi-plate variant of detect_plate().
+    Useful for Phase 2.5: Multi-Plate Detection.
+    
+    Strategy:
+      - Filter by confidence >= conf_threshold
+      - Return all valid detections (NOT filtered to single best)
+      - Sort by confidence descending (for consistency)
+    
+    Args:
+        model: YOLO model object
+        image_bgr: Input image (BGR format)
+        conf_threshold: Minimum confidence to return (default 0.25)
+        target_size: YOLO target size (default 640)
+    
+    Returns:
+        dict with keys:
+            detections: List of detected plates
+            letterboxed: The 640-px letterboxed image used for detection
+        
+        Each detection dict contains:
+            detected: bool (always True for items in detections list)
+            x1, y1, x2, y2: Bounding box in ORIGINAL image coordinates (float)
+            confidence: Detection confidence (float 0-1)
+            plate_w, plate_h: Width/height in original image (pixels)
+            aspect_ratio: plate_w / plate_h
+    """
+    h_orig, w_orig = image_bgr.shape[:2]
+    lb_image, scale, pad_top, pad_left = letterbox_resize(image_bgr, target_size)
+
+    detections = []
+
+    try:
+        results = model.predict(lb_image, conf=conf_threshold, verbose=False)
+    except Exception as e:
+        print(f"[Detection] Inference error: {e}")
+        return {"detections": [], "letterboxed": lb_image}
+
+    boxes = []
+    for r in results:
+        if r.boxes is None:
+            continue
+        for box in r.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            conf = float(box.conf[0])
+            boxes.append((conf, x1, y1, x2, y2))
+
+    if not boxes:
+        return {"detections": [], "letterboxed": lb_image}
+
+    # Sort by confidence descending
+    boxes.sort(key=lambda b: b[0], reverse=True)
+
+    # Convert each box to original coordinates
+    for conf, x1_lb, y1_lb, x2_lb, y2_lb in boxes:
+        # Convert back to original image coordinates
+        x1, y1, x2, y2 = unletterbox_bbox(x1_lb, y1_lb, x2_lb, y2_lb,
+                                          scale, pad_top, pad_left)
+
+        # Clamp to image bounds
+        x1 = max(0.0, x1)
+        y1 = max(0.0, y1)
+        x2 = min(float(w_orig), x2)
+        y2 = min(float(h_orig), y2)
+
+        plate_w = x2 - x1
+        plate_h = y2 - y1
+
+        detection_dict = {
+            "detected": True,
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+            "confidence": conf,
+            "plate_w": plate_w,
+            "plate_h": plate_h,
+            "aspect_ratio": plate_w / max(plate_h, 1),
+        }
+        detections.append(detection_dict)
+
+    return {
+        "detections": detections,
+        "letterboxed": lb_image
+    }
+
+
 def draw_detection(image_bgr, det, output_path=None):
     """
     Draw bounding box, confidence, plate dimensions and aspect ratio
