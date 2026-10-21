@@ -16,6 +16,11 @@ Important:
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 import logging
+from indian_plate_validator import validate_plate
+try:
+    import config
+except ImportError:
+    config = None
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -27,6 +32,8 @@ class ResultStatus(Enum):
     LOW_CONFIDENCE = "LOW_CONFIDENCE"
     OCR_FAILED = "OCR_FAILED"
     DETECTION_FAILED = "DETECTION_FAILED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    LOW_RESOLUTION = "LOW_RESOLUTION"
 
 
 class ThresholdConfig:
@@ -121,19 +128,28 @@ class VariantSelector:
                 []
             )
         
-        # Find best confidence (highest)
-        best_variant = None
-        best_confidence = -1.0
-        
+        # Prefer variants that pass validate_plate
+        valid_variants = []
         for v in variants:
-            confidence = v.get("confidence", 0.0)
-            success = v.get("success", False)
-            
-            # Only consider successful variants
-            if success and confidence > best_confidence:
-                best_confidence = confidence
-                best_variant = v
-        
+            if v.get("success", False):
+                t = v.get("text", "")
+                cleaned, is_v = validate_plate(t)
+                v["is_valid"] = is_v
+                v["cleaned_text"] = cleaned if is_v else t
+                if is_v:
+                    valid_variants.append(v)
+
+        candidates = valid_variants if valid_variants else [v for v in variants if v.get("success", False)]
+
+        if candidates:
+            # Sort by confidence descending
+            candidates.sort(key=lambda x: x.get("confidence", 0.0), reverse=True)
+            best_variant = candidates[0]
+            best_confidence = best_variant.get("confidence", 0.0)
+        else:
+            best_variant = None
+            best_confidence = -1.0
+
         # If no successful variant found
         if best_variant is None:
             return VariantSelector._failed_result(
@@ -141,20 +157,25 @@ class VariantSelector:
                 threshold,
                 variants
             )
-        
-        # Determine status based on threshold
-        status = (
-            ResultStatus.ACCEPTED.value
-            if best_confidence >= threshold
-            else ResultStatus.LOW_CONFIDENCE.value
-        )
-        
+
+        # Status determination
+        acc_floor = getattr(config, 'ACCEPTANCE_CONFIDENCE_FLOOR', 0.5) if config else 0.5
+        is_valid = best_variant.get("is_valid", False)
+        raw_text = best_variant.get("text", "")
+
+        if not raw_text.strip():
+            status = ResultStatus.OCR_FAILED.value
+        elif is_valid and best_confidence >= acc_floor:
+            status = ResultStatus.ACCEPTED.value
+        else:
+            status = ResultStatus.NEEDS_REVIEW.value
+
         # Count variants above threshold
         above_threshold = sum(
             1 for v in variants
             if v.get("success", False) and v.get("confidence", 0.0) >= threshold
         )
-        
+
         return {
             "selected_result": {
                 "text": best_variant.get("text", ""),

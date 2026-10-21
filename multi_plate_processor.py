@@ -24,6 +24,10 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from core import detect_all_plates
 from ocr_module import PlateOCR
+try:
+    import config
+except ImportError:
+    config = None
 
 
 class MultiPlateProcessor:
@@ -93,6 +97,11 @@ class MultiPlateProcessor:
         """
         
         start_time = time.time()
+
+        conf_val = getattr(config, 'DEFAULT_DETECTION_CONF', conf_threshold) if config else conf_threshold
+        iou_val = getattr(config, 'IOU_THRESHOLD', 0.5) if config else 0.5
+        agnostic_val = getattr(config, 'AGNOSTIC_NMS', True) if config else True
+        print(f"PIPELINE v2 ACTIVE: DEFAULT_DETECTION_CONF={conf_val}, IOU_THRESHOLD={iou_val}, AGNOSTIC_NMS={agnostic_val}")
         
         # STEP 1: Detect all plates
         if debug:
@@ -138,22 +147,22 @@ class MultiPlateProcessor:
         if debug:
             print(f"[MultiPlate] Detected {len(detections)} plate(s)")
         
-        # STEP 2: Sort deterministically (top→bottom, left→right)
-        sorted_detections = self._sort_plates_deterministically(detections)
+        # STEP 2: Remove overlapping/duplicate detections using IoU + containment suppression
+        deduplicated_detections = self._remove_duplicate_detections(detections)
         
-        # STEP 2.5: Remove overlapping/duplicate detections
-        deduplicated_detections = self._remove_duplicate_detections(sorted_detections)
+        # STEP 2.5: Sort deterministically (top→bottom, left→right)
+        sorted_detections = self._sort_plates_deterministically(deduplicated_detections)
         
         if debug:
-            if len(deduplicated_detections) < len(sorted_detections):
-                print(f"[MultiPlate] Removed {len(sorted_detections) - len(deduplicated_detections)} "
+            if len(deduplicated_detections) < len(detections):
+                print(f"[MultiPlate] Removed {len(detections) - len(deduplicated_detections)} "
                       f"duplicate detection(s)")
         
         # STEP 3: Process each plate
         ocr_start = time.time()
         plates = []
         
-        for plate_id, detection in enumerate(deduplicated_detections, 1):
+        for plate_id, detection in enumerate(sorted_detections, 1):
             plate_result = self._process_single_plate(
                 image_bgr,
                 detection,
@@ -231,35 +240,44 @@ class MultiPlateProcessor:
     
     def _remove_duplicate_detections(self, detections: List[Dict]) -> List[Dict]:
         """
-        Remove overlapping/duplicate detections using IoU threshold.
+        Remove overlapping/duplicate detections using IoU threshold and containment suppression.
         
         Strategy:
-        - Keep detection with highest confidence
-        - Remove other detections with IoU > threshold
-        
-        Args:
-            detections: List of sorted detections
-            
-        Returns:
-            Deduplicated list
+        - Sort candidates by confidence descending
+        - Higher confidence box is prioritized
+        - Discard if IoU > threshold
+        - Discard if >80% of lower-confidence box area lies inside higher-confidence box (or vice versa)
         """
         if not detections:
             return []
         
-        # Start with highest confidence (first in sorted list)
+        sorted_by_conf = sorted(detections, key=lambda d: d.get('confidence', 0.0), reverse=True)
         kept = []
-        remaining = list(detections)  # Copy
+        iou_thresh = getattr(config, 'IOU_THRESHOLD', self.IOU_THRESHOLD_DUPLICATE) if config else self.IOU_THRESHOLD_DUPLICATE
         
-        while remaining:
-            # Take the first (highest confidence)
-            current = remaining.pop(0)
-            kept.append(current)
+        for det in sorted_by_conf:
+            drop = False
+            for k in kept:
+                # 1. IoU check
+                if self._compute_iou(det, k) > iou_thresh:
+                    drop = True
+                    break
+                
+                # 2. Containment suppression
+                xi1 = max(det['x1'], k['x1'])
+                yi1 = max(det['y1'], k['y1'])
+                xi2 = min(det['x2'], k['x2'])
+                yi2 = min(det['y2'], k['y2'])
+                inter_area = max(0.0, xi2 - xi1) * max(0.0, yi2 - yi1)
+                det_area = max(1e-6, (det['x2'] - det['x1']) * (det['y2'] - det['y1']))
+                k_area = max(1e-6, (k['x2'] - k['x1']) * (k['y2'] - k['y1']))
+                
+                if (inter_area / det_area > 0.80) or (inter_area / k_area > 0.80):
+                    drop = True
+                    break
             
-            # Remove any remaining detections with high IoU to current
-            remaining = [
-                det for det in remaining
-                if self._compute_iou(current, det) <= self.IOU_THRESHOLD_DUPLICATE
-            ]
+            if not drop:
+                kept.append(det)
         
         return kept
     
@@ -298,10 +316,11 @@ class MultiPlateProcessor:
         if debug:
             print(f"[MultiPlate] Processing plate {plate_id}: bbox=({x1},{y1},{x2},{y2})")
         
-        # Expand bounding box by 5% width and 5% height for better OCR
+        # Expand bounding box using config.PADDING_PERCENT for better OCR (e.g. 10%)
         h, w = image_bgr.shape[:2]
-        pad_x = max(2, int((x2 - x1) * 0.05))
-        pad_y = max(2, int((y2 - y1) * 0.05))
+        pad_ratio = getattr(config, 'PADDING_PERCENT', 0.10) if config else 0.10
+        pad_x = max(4, int((x2 - x1) * pad_ratio))
+        pad_y = max(4, int((y2 - y1) * pad_ratio))
         
         crop_x1 = max(0, x1 - pad_x)
         crop_y1 = max(0, y1 - pad_y)
@@ -356,7 +375,8 @@ class MultiPlateProcessor:
             "crop": ocr_result.get("cropped_image") if return_crops else crop,
             "ocr": {
                 "success": ocr_result.get("success", False),
-                "text": ocr_result.get("final_text", ""),
+                "text": ocr_result.get("final_text", "") or ocr_result.get("text", ""),
+                "final_text": ocr_result.get("final_text", "") or ocr_result.get("text", ""),
                 "raw_text": ocr_result.get("raw_text", ""),
                 "cleaned_text": ocr_result.get("cleaned_text", ""),
                 "confidence": round(float(ocr_result.get("confidence", 0.0)), 4),

@@ -38,6 +38,8 @@ runs/
 # ── Pipeline outputs ──────────────────────────────────────────────────────
 outputs/
 !outputs/batch_report/.gitkeep
+test_uploads/
+test_results/
 
 # ── Test images ───────────────────────────────────────────────────────────
 test_images/*

@@ -7,6 +7,7 @@ Phase 2.3: OCR text cleaning + Indian plate validation
 """
 
 import os
+import re
 import cv2
 import numpy as np
 from paddleocr import PaddleOCR
@@ -19,7 +20,11 @@ from threshold_and_selection import (
     ResultStatus
 )
 from ocr_cleaning import TextCleaningPipeline
-from indian_plate_validator import PlateValidator, PlateQualityScorer
+from indian_plate_validator import PlateValidator, PlateQualityScorer, validate_plate
+try:
+    import config
+except ImportError:
+    config = None
 import logging
 
 logging.basicConfig(level=logging.WARNING)
@@ -116,18 +121,41 @@ class PlateOCR:
             # Extract recognized texts and scores from OCRResult dict
             rec_texts = ocr_result.get('rec_texts', [])
             rec_scores = ocr_result.get('rec_scores', [])
+            dt_polys = ocr_result.get('dt_polys', [])
             
-            # Combine all recognized text
-            recognized_text = ' '.join(rec_texts) if rec_texts else ""
+            # Post-filter: Discard detected text boxes whose height is < 40% of the tallest text box
+            # and filter to [A-Z0-9] only
+            filtered_texts = []
+            filtered_scores = []
+            if dt_polys and len(dt_polys) == len(rec_texts):
+                heights = []
+                for poly in dt_polys:
+                    pts = np.array(poly)
+                    h = pts[:, 1].max() - pts[:, 1].min()
+                    heights.append(h)
+                max_h = max(heights) if heights else 0
+                for t, s, h in zip(rec_texts, rec_scores, heights):
+                    if max_h > 0 and h < 0.40 * max_h:
+                        continue  # discard small text like IND
+                    clean_t = re.sub(r'[^A-Z0-9]', '', str(t).upper())
+                    if clean_t:
+                        filtered_texts.append(clean_t)
+                        filtered_scores.append(s)
+            else:
+                for t, s in zip(rec_texts, rec_scores):
+                    clean_t = re.sub(r'[^A-Z0-9]', '', str(t).upper())
+                    if clean_t:
+                        filtered_texts.append(clean_t)
+                        filtered_scores.append(s)
             
-            # Calculate average confidence
-            avg_confidence = np.mean(rec_scores) if rec_scores else 0.0
+            recognized_text = ''.join(filtered_texts)
+            avg_confidence = float(np.mean(filtered_scores)) if filtered_scores else 0.0
             success = len(recognized_text.strip()) > 0
             
             return {
                 "success": success,
                 "text": recognized_text.strip(),
-                "confidence": round(float(avg_confidence), 4)
+                "confidence": round(avg_confidence, 4)
             }
         
         except Exception as e:
@@ -223,26 +251,16 @@ class PlateOCR:
 
                 # ── EARLY STOPPING CHECK ─────────────────────────────────────
                 # Only triggered when early_stopping=True.
-                # Condition: ACCEPTED (conf >= threshold) AND validation_valid.
-                # We run inline clean + validate to evaluate the candidate.
-                # The existing VariantSelector / quality scorer still runs
-                # downstream in process_plate_with_cleaning_and_validation —
-                # this check only gates whether we continue to the next variant.
-                if early_stopping and success and conf >= early_stop_threshold:
-                    # Inline clean + validate to confirm plate is usable
-                    cleaning = TextCleaningPipeline.clean_ocr_text(text)
-                    cleaned = cleaning.get("corrected_text", "")
-                    validation = PlateValidator.validate_indian_plate(cleaned)
-                    validation_valid = validation.get("valid", False)
-
-                    if validation_valid:
+                # Stop early only on a valid plate!
+                if early_stopping and success:
+                    clean_cand, is_cand_valid = validate_plate(text)
+                    if is_cand_valid and conf >= early_stop_threshold:
                         early_stopped = True
                         early_stop_reason = (
                             f"variant={method_name} conf={conf:.4f}>={early_stop_threshold:.4f}"
                             f" validation=VALID after {ocr_calls_made} call(s)"
                         )
                         break
-                    # else: confidence ok but validation failed → try next variant
 
             return {
                 "variants": results,
@@ -422,9 +440,10 @@ class PlateOCR:
         # Store original crop for UI display
         original_crop = plate_region.copy()
         
-        # Add 5% synthetic grey padding to the OCR input to prevent edge-character cutoff
-        pad_x = max(2, int(plate_region.shape[1] * 0.05))
-        pad_y = max(2, int(plate_region.shape[0] * 0.05))
+        # Add synthetic grey padding (from config.PADDING_PERCENT) to prevent edge-character cutoff
+        pad_frac = getattr(config, 'PADDING_PERCENT', 0.09) if config else 0.09
+        pad_x = max(2, int(plate_region.shape[1] * pad_frac))
+        pad_y = max(2, int(plate_region.shape[0] * pad_frac))
         plate_region = cv2.copyMakeBorder(
             plate_region, pad_y, pad_y, pad_x, pad_x, 
             cv2.BORDER_CONSTANT, value=[127, 127, 127]
@@ -469,7 +488,7 @@ class PlateOCR:
                 "early_stop_reason": None,
             }
         
-        # Select best variant based on threshold
+        # Select best variant based on threshold (prefers valid plates)
         selection = VariantSelector.select_best_variant(comparison, threshold)
         
         selected_result = selection.get("selected_result", {})
@@ -478,7 +497,6 @@ class PlateOCR:
         raw_text = selected_result.get("text", "")
         ocr_confidence = selected_result.get("confidence", 0.0)
         variant_used = selected_result.get("variant_used")
-        ocr_status = selected_result.get("status")
         
         # PHASE 2.3: Clean and validate text
         cleaning_result = TextCleaningPipeline.clean_ocr_text(raw_text)
@@ -486,15 +504,24 @@ class PlateOCR:
         corrections_made = cleaning_result.get("corrections_made", 0)
         correction_confidence = cleaning_result.get("correction_confidence", 1.0)
         
-        # Validate against Indian plate format
-        validation_result = PlateValidator.validate_indian_plate(cleaned_text)
-        validation_valid = validation_result.get("valid", False)
-        validation_status = validation_result.get("validation_status", "EMPTY")
-        state_code = validation_result.get("state_code")
+        # Validate with validate_plate
+        clean_cand, is_valid_plate = validate_plate(cleaned_text)
+        if not is_valid_plate:
+            clean_cand, is_valid_plate = validate_plate(raw_text)
         
-        # Determine final text
-        # Use cleaned text if valid, otherwise cleaned text anyway but mark as invalid
-        final_text = cleaned_text if validation_valid else cleaned_text
+        if is_valid_plate and clean_cand:
+            final_text = clean_cand
+            validation_valid = True
+            validation_status = "VALID"
+            state_code = clean_cand[:2]
+        else:
+            final_text = cleaned_text if cleaned_text else raw_text
+            validation_valid = False
+            validation_status = "INVALID_FORMAT"
+            state_code = final_text[:2] if len(final_text) >= 2 and final_text[:2].isalpha() else None
+        
+        # Validate against Indian plate format for quality scorer
+        validation_result = PlateValidator.validate_indian_plate(final_text)
         
         # Score overall quality
         quality_result = PlateQualityScorer.score_plate_quality(
@@ -504,16 +531,35 @@ class PlateOCR:
             corrections_made,
             correction_confidence
         )
+
+        # Status order:
+        # 1. empty text -> OCR_FAILED
+        # 2. original crop width < 80px -> LOW_RESOLUTION (still run OCR, never ACCEPTED)
+        # 3. valid format and state code -> ACCEPTED
+        # 4. otherwise -> NEEDS_REVIEW
+        orig_crop_w = original_crop.shape[1]
+        min_w_low_res = getattr(config, 'MIN_PLATE_WIDTH_FOR_LOW_RES', 80) if config else 80
+        acc_floor = getattr(config, 'ACCEPTANCE_CONFIDENCE_FLOOR', 0.5) if config else 0.5
+
+        if not raw_text.strip() and not final_text.strip():
+            final_status = ResultStatus.OCR_FAILED.value
+        elif orig_crop_w < min_w_low_res:
+            final_status = ResultStatus.LOW_RESOLUTION.value
+        elif validation_valid and ocr_confidence >= acc_floor:
+            final_status = ResultStatus.ACCEPTED.value
+        else:
+            final_status = ResultStatus.NEEDS_REVIEW.value
         
         # Build result
         result = {
-            "success": ocr_status == ResultStatus.ACCEPTED.value and validation_valid,
+            "success": final_status == ResultStatus.ACCEPTED.value,
             "raw_text": raw_text,
             "cleaned_text": cleaned_text,
             "final_text": final_text,
+            "text": final_text,
             "confidence": ocr_confidence,
             "variant_used": variant_used,
-            "status": ocr_status,
+            "status": final_status,
             "validation_status": validation_status,
             "validation_valid": validation_valid,
             "state_code": state_code,
@@ -524,7 +570,6 @@ class PlateOCR:
             "is_valid_format": validation_valid,
             "threshold_used": threshold,
             "variants_above_threshold": selection.get("variants_above_threshold", 0),
-            # Early-stopping metadata — always present; False/0 in baseline mode
             "ocr_calls_made": comparison.get("ocr_calls_made", 5),
             "early_stopped": comparison.get("early_stopped", False),
             "early_stop_reason": comparison.get("early_stop_reason", None),

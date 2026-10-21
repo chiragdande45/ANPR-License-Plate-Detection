@@ -158,26 +158,27 @@ def test():
             detections.append(detection)
 
         # ── Draw annotated result image ─────────────────────────────────────────
-        # Use YOLO's own plot() on a fresh prediction for the overlay boxes,
-        # then overdraw OCR text ourselves — same as before.
-        raw_results = MODEL.predict(filepath, conf=conf, verbose=False)
-        img_drawn = raw_results[0].plot()
+        img_drawn = img.copy()
 
         for det in detections:
-            if det["ocr"]["success"]:
-                x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
-                text    = det["ocr"]["final_text"]
-                o_conf  = det["ocr"]["confidence"]
-                variant = (
-                    det["ocr"].get("recovery_variant")
-                    if det["ocr"].get("recovery_applied")
-                    else det["ocr"].get("variant_used")
-                )
+            x1, y1, x2, y2 = int(det["x1"]), int(det["y1"]), int(det["x2"]), int(det["y2"])
+            det_conf = det["confidence"]
+            ocr_info = det["ocr"]
+            is_acc = ocr_info.get("status") == "ACCEPTED"
+            box_color = (0, 255, 0) if is_acc else (0, 165, 255)  # Green if ACCEPTED, orange otherwise
 
-                cv2.rectangle(img_drawn, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                display_text = f"{text} ({o_conf*100:.1f}%{' via ' + variant if variant else ''})"
-                cv2.putText(img_drawn, display_text, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.rectangle(img_drawn, (x1, y1), (x2, y2), box_color, 2)
+
+            text = ocr_info.get("final_text") or ocr_info.get("raw_text") or "PLATE"
+            status_str = ocr_info.get("status", "")
+            o_conf = ocr_info.get("confidence", 0.0)
+            variant = ocr_info.get("variant_used", "")
+
+            display_text = f"{text} [{status_str}] ({det_conf:.2f} det, {o_conf*100:.1f}% ocr)"
+            (tw, th), _ = cv2.getTextSize(display_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            cv2.rectangle(img_drawn, (x1, max(0, y1 - th - 6)), (x1 + tw + 4, y1), box_color, -1)
+            cv2.putText(img_drawn, display_text, (x1 + 2, y1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
         out_path = os.path.join(app.config['RESULTS_FOLDER'], f"result_{safe_filename}")
         cv2.imwrite(out_path, img_drawn)
@@ -190,13 +191,17 @@ def test():
             np.mean([d["confidence"] for d in detections])
             if detections else 0.0
         )
-        recognized_count  = sum(1 for d in detections if d["ocr"]["success"])
+        accepted_count    = sum(1 for d in detections if d["ocr"].get("status") == "ACCEPTED")
+        review_count      = sum(1 for d in detections if d["ocr"].get("status") in ("NEEDS_REVIEW", "LOW_RESOLUTION"))
+        recognized_count  = sum(1 for d in detections if bool(d["ocr"].get("final_text") or d["ocr"].get("raw_text")))
 
         return jsonify({
             "success":          True,
             "detections":       plate_count,
             "plates":           detections,
             "avg_confidence":   round(float(avg_conf), 4),
+            "accepted_count":   accepted_count,
+            "review_count":     review_count,
             "recognized_count": recognized_count,
             "image_size":       f"{w}x{h}",
             "result_image":     f"data:image/jpeg;base64,{img_base64}",

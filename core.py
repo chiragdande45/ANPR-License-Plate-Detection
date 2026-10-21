@@ -25,6 +25,11 @@ import time
 import os
 from pathlib import Path
 
+try:
+    import config
+except ImportError:
+    config = None
+
 # ---------------------------------------------------------------------------
 # Optional dependency: scikit-image for Sauvola
 # ---------------------------------------------------------------------------
@@ -223,8 +228,18 @@ def detect_all_plates(model, image_bgr, conf_threshold=0.25, target_size=640):
 
     detections = []
 
+    iou_thresh = getattr(config, "IOU_THRESHOLD", 0.5) if config else 0.5
+    agnostic_nms = getattr(config, "AGNOSTIC_NMS", True) if config else True
+    print(f"[YOLO predict kwargs] conf={conf_threshold}, iou={iou_thresh}, agnostic_nms={agnostic_nms}, verbose=False")
+
     try:
-        results = model.predict(lb_image, conf=conf_threshold, verbose=False)
+        results = model.predict(
+            lb_image,
+            conf=conf_threshold,
+            iou=iou_thresh,
+            agnostic_nms=agnostic_nms,
+            verbose=False
+        )
     except Exception as e:
         print(f"[Detection] Inference error: {e}")
         return {"detections": [], "letterboxed": lb_image}

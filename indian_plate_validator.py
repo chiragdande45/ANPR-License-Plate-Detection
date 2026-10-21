@@ -435,26 +435,89 @@ class PlateQualityScorer:
         }
 
 
+def validate_plate(text: str) -> tuple[Optional[str], bool]:
+    """Validate raw OCR text against Indian plate rules.
+
+    Steps:
+    1. Upper‑case and keep only alphanumeric characters.
+    2. Apply positional character corrections (common OCR confusions).
+    3. Match against standard (AA##AA####), old (AA##A####), and BH patterns.
+    4. Verify leading state code.
+
+    Returns a tuple ``(cleaned_text_or_None, is_valid)``.
+    """
+    if not text:
+        return None, False
+
+    # 1. Uppercase and filter alphanumerics
+    cleaned = re.sub(r"[^A-Z0-9]", "", text.upper())
+    if len(cleaned) < 8 or len(cleaned) > 11:
+        return None, False
+
+    LETTER_TO_DIGIT = {"O": "0", "I": "1", "S": "5", "B": "8", "G": "6", "Z": "2"}
+    DIGIT_TO_LETTER = {"0": "O", "1": "I", "5": "S", "8": "B", "6": "G", "2": "Z"}
+
+    # Try standard 10-char format: AA ## AA ####
+    if len(cleaned) == 10:
+        c = list(cleaned)
+        # Positions 0, 1: letters
+        for i in (0, 1):
+            if c[i] in DIGIT_TO_LETTER:
+                c[i] = DIGIT_TO_LETTER[c[i]]
+        # Positions 2, 3: digits
+        for i in (2, 3):
+            if c[i] in LETTER_TO_DIGIT:
+                c[i] = LETTER_TO_DIGIT[c[i]]
+        # Positions 4, 5: letters
+        for i in (4, 5):
+            if c[i] in DIGIT_TO_LETTER:
+                c[i] = DIGIT_TO_LETTER[c[i]]
+        # Positions 6, 7, 8, 9: digits
+        for i in (6, 7, 8, 9):
+            if c[i] in LETTER_TO_DIGIT:
+                c[i] = LETTER_TO_DIGIT[c[i]]
+        cand = "".join(c)
+        if re.match(r"^[A-Z]{2}\d{2}[A-Z]{2}\d{4}$", cand):
+            state_code = cand[:2]
+            if IndianStateCodeValidator.is_valid_state_code(state_code):
+                return cand, True
+
+    # Try old 9-char format: AA ## A ####
+    if len(cleaned) == 9:
+        c = list(cleaned)
+        # Positions 0, 1: letters
+        for i in (0, 1):
+            if c[i] in DIGIT_TO_LETTER:
+                c[i] = DIGIT_TO_LETTER[c[i]]
+        # Positions 2, 3: digits
+        for i in (2, 3):
+            if c[i] in LETTER_TO_DIGIT:
+                c[i] = LETTER_TO_DIGIT[c[i]]
+        # Position 4: letter
+        if c[4] in DIGIT_TO_LETTER:
+            c[4] = DIGIT_TO_LETTER[c[4]]
+        # Positions 5, 6, 7, 8: digits
+        for i in (5, 6, 7, 8):
+            if c[i] in LETTER_TO_DIGIT:
+                c[i] = LETTER_TO_DIGIT[c[i]]
+        cand = "".join(c)
+        if re.match(r"^[A-Z]{2}\d{2}[A-Z]\d{4}$", cand):
+            state_code = cand[:2]
+            if IndianStateCodeValidator.is_valid_state_code(state_code):
+                return cand, True
+
+    # Try BH (Bharat Series): ##BH####XX (9-10 chars)
+    if 9 <= len(cleaned) <= 10 and "BH" in cleaned[1:4]:
+        c = list(cleaned)
+        # Pos 0, 1: digits (year)
+        for i in (0, 1):
+            if c[i] in LETTER_TO_DIGIT:
+                c[i] = LETTER_TO_DIGIT[c[i]]
+        cand = "".join(c)
+        if re.match(r"^\d{2}BH\d{4}[A-Z]{1,2}$", cand):
+            return cand, True
+
+    return None, False
+
 # Module-level convenience functions
 
-def validate_indian_plate(text: str) -> Dict:
-    """Convenience function: validate plate format"""
-    return PlateValidator.validate_indian_plate(text)
-
-
-def get_validation_summary(validation_result: Dict) -> str:
-    """Convenience function: get validation summary"""
-    return PlateValidator.get_validation_summary(validation_result)
-
-
-def score_plate_quality(
-    text: str,
-    confidence: float,
-    validation_result: Dict,
-    corrections_made: int = 0,
-    correction_confidence: float = 1.0
-) -> Dict:
-    """Convenience function: score plate quality"""
-    return PlateQualityScorer.score_plate_quality(
-        text, confidence, validation_result, corrections_made, correction_confidence
-    )

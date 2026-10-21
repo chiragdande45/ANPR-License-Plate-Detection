@@ -638,8 +638,8 @@
                             <div class="stat-value">${escapeHtml(data.image_size || 'N/A')}</div>
                         </div>
                         <div class="stat">
-                            <div class="stat-label">Recognized</div>
-                            <div class="stat-value">${data.recognized_count || 0}</div>
+                            <div class="stat-label">Accepted</div>
+                            <div class="stat-value" style="color: ${data.accepted_count > 0 ? '#28a745' : '#e2e8f0'}">${data.accepted_count !== undefined ? data.accepted_count : (data.recognized_count || 0)}</div>
                         </div>
                     </div>
             `;
@@ -654,9 +654,18 @@
                     const ocrConf = ((ocr.confidence || 0) * 100).toFixed(1);
                     const status = ocr.status || 'UNKNOWN';
 
-                    let badgeColor = '#28a745';
-                    let statusLabel = '✓ ACCEPTED';
-                    if (status === 'LOW_CONFIDENCE') {
+                    let badgeColor = '#6c757d';
+                    let statusLabel = status;
+                    if (status === 'ACCEPTED') {
+                        badgeColor = '#28a745';
+                        statusLabel = '✓ ACCEPTED';
+                    } else if (status === 'NEEDS_REVIEW') {
+                        badgeColor = '#fd7e14';
+                        statusLabel = '⚠ NEEDS REVIEW';
+                    } else if (status === 'LOW_RESOLUTION') {
+                        badgeColor = '#ffc107';
+                        statusLabel = '🔍 LOW RESOLUTION';
+                    } else if (status === 'LOW_CONFIDENCE') {
                         badgeColor = '#ffc107';
                         statusLabel = '⚠ LOW CONFIDENCE';
                     } else if (status === 'OCR_FAILED' || status === 'FAILED') {
