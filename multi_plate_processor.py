@@ -387,6 +387,7 @@ class MultiPlateProcessor:
                 "variant_used": ocr_result.get("variant_used"),
                 "state_code": ocr_result.get("state_code"),
                 "status": ocr_result.get("status", "UNKNOWN"),
+                "reason": ocr_result.get("reason", ""),
                 "threshold_used": ocr_result.get("threshold_used", ocr_threshold),
                 "variants_above_threshold": ocr_result.get("variants_above_threshold", 0),
                 "is_valid_format": ocr_result.get("is_valid_format", False),

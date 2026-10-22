@@ -33,16 +33,97 @@ class PlateOCR:
     """License plate OCR using PaddleOCR"""
     
     def __init__(self):
-        """Initialize PaddleOCR"""
+        """Initialize PaddleOCR with config detector parameters"""
         try:
             print("[OCR] Initializing PaddleOCR...")
+            det_thresh = getattr(config, 'DET_DB_THRESH', 0.2) if config else 0.2
+            det_box_thresh = getattr(config, 'DET_DB_BOX_THRESH', 0.4) if config else 0.4
+            det_unclip = getattr(config, 'DET_DB_UNCLIP_RATIO', 2.0) if config else 2.0
             # Disable mkldnn to avoid tensor conversion errors on Windows CPU
             # See: https://github.com/PaddlePaddle/PaddleOCR/discussions/13052
-            self.ocr = PaddleOCR(use_angle_cls=False, lang='en', enable_mkldnn=False)
+            self.ocr = PaddleOCR(
+                use_angle_cls=False,
+                lang='en',
+                enable_mkldnn=False,
+                det_db_thresh=det_thresh,
+                det_db_box_thresh=det_box_thresh,
+                det_db_unclip_ratio=det_unclip
+            )
             print("[OCR] PaddleOCR initialized successfully")
         except Exception as e:
             print(f"[OCR ERROR] Failed to initialize PaddleOCR: {e}")
             self.ocr = None
+
+    @staticmethod
+    def estimate_plate_tilt(crop):
+        """
+        Estimate plate tilt using Hough lines on plate edges / text lines
+        and cv2.minAreaRect on dark text pixels.
+        Returns angle in degrees to rotate by to level the plate.
+        """
+        if crop is None or crop.size == 0:
+            return 0.0
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop.copy()
+        
+        # 1. Hough lines on Canny edges
+        edges = cv2.Canny(gray, 50, 150)
+        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=40, minLineLength=30, maxLineGap=10)
+        hough_angles = []
+        if lines is not None:
+            for x1, y1, x2, y2 in lines.reshape(-1, 4):
+                dx = x2 - x1
+                dy = y2 - y1
+                if dx != 0:
+                    ang = float(np.degrees(np.arctan2(dy, dx)))
+                    while ang > 45: ang -= 90
+                    while ang < -45: ang += 90
+                    hough_angles.append(ang)
+                    
+        # 2. Contours of dark text pixels
+        _, bin_inv = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        cnts, _ = cv2.findContours(bin_inv, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        cnt_angles = []
+        for c in cnts:
+            area = cv2.contourArea(c)
+            if 50 < area < 10000:
+                _, (w, h), a = cv2.minAreaRect(c)
+                ang = a + 90 if w < h else a
+                while ang > 45: ang -= 90
+                while ang < -45: ang += 90
+                cnt_angles.append(ang)
+                
+        all_angles = []
+        if hough_angles:
+            all_angles.extend(hough_angles)
+        if cnt_angles:
+            all_angles.extend(cnt_angles)
+            
+        if all_angles:
+            return float(np.median(all_angles))
+        return 0.0
+
+    @classmethod
+    def deskew_plate(cls, crop):
+        """
+        Estimate plate tilt and rotate crop to level, keeping the white border
+        so nothing is clipped.
+        """
+        if crop is None or crop.size == 0:
+            return crop
+        ang = cls.estimate_plate_tilt(crop)
+        if abs(ang) < 2.0:
+            return crop
+        h, w = crop.shape[:2]
+        M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), ang, 1.0)
+        cos = np.abs(M[0, 0])
+        sin = np.abs(M[0, 1])
+        nW = int((h * sin) + (w * cos))
+        nH = int((h * cos) + (w * sin))
+        M[0, 2] += (nW / 2.0) - w / 2.0
+        M[1, 2] += (nH / 2.0) - h / 2.0
+        deskewed = cv2.warpAffine(crop, M, (nW, nH), borderValue=(255, 255, 255))
+        print(f"[DESKEW] Plate tilted by {ang:.2f} deg, rotated to level.")
+        return deskewed
     
     def preprocess_plate(self, plate_image, upscale=True, upscale_factor=2):
         """
@@ -90,12 +171,13 @@ class PlateOCR:
             print(f"[OCR WARNING] Preprocessing failed: {e}, using original image")
             return plate_image
     
-    def recognize_text(self, plate_image):
+    def recognize_text(self, plate_image, variant_name=None):
         """
         Recognize text in plate using PaddleOCR
         
         Args:
             plate_image: Plate region image
+            variant_name: Optional name of preprocessing variant for logging
             
         Returns:
             Dictionary with recognition results
@@ -105,28 +187,31 @@ class PlateOCR:
                 "success": False,
                 "text": "",
                 "confidence": 0.0,
-                "error": "OCR not initialized"
+                "error": "OCR not initialized",
+                "has_temp": False,
+                "raw_texts": [],
             }
         
         try:
-            # Run OCR directly on original image
+            # Run OCR directly on image
             result = self.ocr.ocr(plate_image)
             
             if not result or len(result) == 0:
-                return {"success": False, "text": "", "confidence": 0.0}
+                v_label = variant_name if variant_name else "recognize_text"
+                print(f"[OCR FILTER] [{v_label}] Raw lines: 0 | After height: 0 | After alnum: 0 | After drop: 0 | Final: ''")
+                return {"success": False, "text": "", "confidence": 0.0, "has_temp": False, "raw_texts": []}
             
-            # In PaddleOCR 3.7, result is a list containing OCRResult object(s)
             ocr_result = result[0]
-            
-            # Extract recognized texts and scores from OCRResult dict
             rec_texts = ocr_result.get('rec_texts', [])
             rec_scores = ocr_result.get('rec_scores', [])
             dt_polys = ocr_result.get('dt_polys', [])
             
-            # Post-filter: Discard detected text boxes whose height is < 40% of the tallest text box
-            # and filter to [A-Z0-9] only
-            filtered_texts = []
-            filtered_scores = []
+            # Flag if TEMP appears in any raw OCR line
+            has_temp = any('TEMP' in str(t).upper() for t in rec_texts)
+            raw_line_count = len(rec_texts)
+
+            # 1. Height filter: Discard text boxes whose height is < 40% of the tallest text box
+            lines_after_height = []
             if dt_polys and len(dt_polys) == len(rec_texts):
                 heights = []
                 for poly in dt_polys:
@@ -134,33 +219,90 @@ class PlateOCR:
                     h = pts[:, 1].max() - pts[:, 1].min()
                     heights.append(h)
                 max_h = max(heights) if heights else 0
-                for t, s, h in zip(rec_texts, rec_scores, heights):
+                for poly, t, s, h in zip(dt_polys, rec_texts, rec_scores, heights):
                     if max_h > 0 and h < 0.40 * max_h:
-                        continue  # discard small text like IND
-                    clean_t = re.sub(r'[^A-Z0-9]', '', str(t).upper())
-                    if clean_t:
-                        filtered_texts.append(clean_t)
-                        filtered_scores.append(s)
+                        continue  # discard small text
+                    pts = np.array(poly)
+                    lines_after_height.append({
+                        "raw": str(t),
+                        "score": s,
+                        "y": float(pts[:, 1].min()),
+                        "x": float(pts[:, 0].min()),
+                    })
             else:
-                for t, s in zip(rec_texts, rec_scores):
-                    clean_t = re.sub(r'[^A-Z0-9]', '', str(t).upper())
-                    if clean_t:
-                        filtered_texts.append(clean_t)
-                        filtered_scores.append(s)
-            
-            recognized_text = ''.join(filtered_texts)
-            avg_confidence = float(np.mean(filtered_scores)) if filtered_scores else 0.0
+                for idx, (t, s) in enumerate(zip(rec_texts, rec_scores)):
+                    lines_after_height.append({
+                        "raw": str(t),
+                        "score": s,
+                        "y": float(idx),
+                        "x": 0.0,
+                    })
+
+            # 2. Filter lines to [A-Z0-9]
+            lines_after_alnum = []
+            for item in lines_after_height:
+                clean_t = re.sub(r'[^A-Z0-9]', '', item["raw"].upper())
+                if clean_t:
+                    item_copy = dict(item)
+                    item_copy["text"] = clean_t
+                    lines_after_alnum.append(item_copy)
+
+            # 3. Drop lines whose text is exactly "IND" or "TEMP"
+            kept_lines = []
+            for item in lines_after_alnum:
+                if item["text"] in ("IND", "TEMP"):
+                    continue
+                kept_lines.append(item)
+
+            # 4. Default join: sorted by y, then x
+            kept_lines.sort(key=lambda item: (item['y'], item['x']))
+            default_order = [item['text'] for item in kept_lines]
+            default_text = ''.join(default_order)
+
+            # 5. Check validation and line permutations (max 5 lines)
+            clean_cand, is_default_valid = validate_plate(default_text)
+            winning_order = default_order
+            recognized_text = default_text
+            order_source = "default"
+
+            if not is_default_valid and 0 < len(kept_lines) <= 5:
+                import itertools
+                for perm in itertools.permutations(kept_lines):
+                    cand_text = ''.join(item['text'] for item in perm)
+                    _, cand_valid = validate_plate(cand_text)
+                    if cand_valid:
+                        winning_order = [item['text'] for item in perm]
+                        recognized_text = cand_text
+                        order_source = "permutation"
+                        break
+
+            if kept_lines:
+                print(f"[OCR] Line order won: {winning_order} -> '{recognized_text}' ({order_source})")
+
+            # Logging filter counts for diagnosis
+            v_label = variant_name if variant_name else "recognize_text"
+            print(f"[OCR FILTER] [{v_label}] Raw lines: {raw_line_count} {[str(t) for t in rec_texts]} "
+                  f"| After height: {len(lines_after_height)} {[l['raw'] for l in lines_after_height]} "
+                  f"| After alnum: {len(lines_after_alnum)} {[l['text'] for l in lines_after_alnum]} "
+                  f"| After IND/TEMP drop: {len(kept_lines)} {[l['text'] for l in kept_lines]} "
+                  f"| Final text: '{recognized_text}'")
+
+            avg_confidence = float(np.mean([item['score'] for item in kept_lines])) if kept_lines else 0.0
             success = len(recognized_text.strip()) > 0
             
             return {
                 "success": success,
                 "text": recognized_text.strip(),
-                "confidence": round(avg_confidence, 4)
+                "confidence": round(avg_confidence, 4),
+                "has_temp": has_temp,
+                "raw_texts": [str(t) for t in rec_texts],
+                "winning_order": winning_order,
+                "raw_lines_count": raw_line_count,
             }
         
         except Exception as e:
             print(f"[OCR ERROR] Recognition failed: {e}")
-            return {"success": False, "text": "", "confidence": 0.0, "error": str(e)}
+            return {"success": False, "text": "", "confidence": 0.0, "error": str(e), "has_temp": False, "raw_texts": []}
     
     def compare_all_preprocessing_variants(
         self,
@@ -214,9 +356,19 @@ class PlateOCR:
             early_stop_threshold = ThresholdConfig.OCR_CONFIDENCE_THRESHOLD
 
         try:
-            # Get all preprocessing variants
-            all_variants = PlatePreprocessor.get_all_variants(plate_image)
+            # Variant definitions
+            primary_variant_names = ["baseline", "clahe_sharp", "denoise_clahe"]
+            fallback_variant_names = ["otsu", "adaptive"]
+
             descriptions = PlatePreprocessor.get_variant_descriptions()
+
+            fn_map = {
+                "baseline": PlatePreprocessor.variant_baseline,
+                "clahe_sharp": PlatePreprocessor.variant_clahe_sharpening,
+                "denoise_clahe": PlatePreprocessor.variant_denoise_clahe,
+                "otsu": PlatePreprocessor.variant_otsu_threshold,
+                "adaptive": PlatePreprocessor.variant_adaptive_threshold,
+            }
 
             results = []
             best_confidence = 0.0
@@ -224,43 +376,77 @@ class PlateOCR:
             ocr_calls_made = 0
             early_stopped = False
             early_stop_reason = None
+            has_temp = False
 
-            # Run OCR on each variant
-            for method_name, processed_image in all_variants.items():
-                ocr_result = self.recognize_text(processed_image)
+            def run_single_variant(method_name):
+                nonlocal best_confidence, best_method, ocr_calls_made, has_temp
+                fn = fn_map.get(method_name)
+                processed_image = fn(plate_image) if fn else plate_image
+
+                ocr_result = self.recognize_text(processed_image, variant_name=method_name)
                 ocr_calls_made += 1
 
                 conf = ocr_result.get("confidence", 0.0)
                 text = ocr_result.get("text", "")
                 success = ocr_result.get("success", False)
+                v_has_temp = ocr_result.get("has_temp", False)
+                if v_has_temp:
+                    has_temp = True
+
+                clean_cand, is_v = validate_plate(text)
 
                 result_entry = {
-                    "method": method_name,       # kept for backward compat
-                    "variant": method_name,      # canonical key expected by VariantSelector
+                    "method": method_name,
+                    "variant": method_name,
                     "description": descriptions.get(method_name, "Unknown"),
                     "text": text,
                     "confidence": conf,
                     "success": success,
+                    "has_temp": v_has_temp,
+                    "raw_texts": ocr_result.get("raw_texts", []),
+                    "is_valid": is_v,
+                    "cleaned_text": clean_cand if is_v else text,
                 }
                 results.append(result_entry)
 
-                # Track best confidence (used for final selection in baseline mode)
                 if conf > best_confidence:
                     best_confidence = conf
                     best_method = method_name
 
-                # ── EARLY STOPPING CHECK ─────────────────────────────────────
-                # Only triggered when early_stopping=True.
-                # Stop early only on a valid plate!
-                if early_stopping and success:
-                    clean_cand, is_cand_valid = validate_plate(text)
-                    if is_cand_valid and conf >= early_stop_threshold:
-                        early_stopped = True
-                        early_stop_reason = (
-                            f"variant={method_name} conf={conf:.4f}>={early_stop_threshold:.4f}"
-                            f" validation=VALID after {ocr_calls_made} call(s)"
-                        )
-                        break
+                return result_entry
+
+            def check_agreement():
+                groups = {}
+                for r in results:
+                    if r.get("is_valid", False):
+                        cand = r.get("cleaned_text")
+                        groups.setdefault(cand, []).append(r["variant"])
+                for cand, vars_list in groups.items():
+                    if len(vars_list) >= 2:
+                        return True, cand, vars_list
+                return False, None, []
+
+            # 1. Run at most 3 variants (baseline, clahe_sharp, denoise_clahe)
+            for m in primary_variant_names:
+                run_single_variant(m)
+                agreed, agreed_text, agreed_vars = check_agreement()
+                if early_stopping and agreed:
+                    early_stopped = True
+                    early_stop_reason = f"2 variants {agreed_vars} agreed on '{agreed_text}'"
+                    break
+
+            # 2. Run otsu / adaptive only if none passes validate_plate
+            if not early_stopped:
+                has_any_valid = any(r.get("is_valid", False) for r in results)
+                if not has_any_valid:
+                    print("[OCR] No primary variant passed validation; running fallback variants (otsu, adaptive)...")
+                    for m in fallback_variant_names:
+                        run_single_variant(m)
+                        agreed, agreed_text, agreed_vars = check_agreement()
+                        if early_stopping and agreed:
+                            early_stopped = True
+                            early_stop_reason = f"2 variants {agreed_vars} agreed on '{agreed_text}'"
+                            break
 
             return {
                 "variants": results,
@@ -269,6 +455,7 @@ class PlateOCR:
                 "ocr_calls_made": ocr_calls_made,
                 "early_stopped": early_stopped,
                 "early_stop_reason": early_stop_reason,
+                "has_temp": has_temp,
             }
 
         except Exception as e:
@@ -279,6 +466,7 @@ class PlateOCR:
                 "ocr_calls_made": 0,
                 "early_stopped": False,
                 "early_stop_reason": None,
+                "has_temp": False,
             }
     
     def validate_plate_format(self, text):
@@ -439,6 +627,9 @@ class PlateOCR:
         
         # Store original crop for UI display
         original_crop = plate_region.copy()
+
+        # Before OCR, estimate plate tilt, rotate crop to level, and keep white border
+        plate_region = self.deskew_plate(plate_region)
         
         # Add synthetic grey padding (from config.PADDING_PERCENT) to prevent edge-character cutoff
         pad_frac = getattr(config, 'PADDING_PERCENT', 0.09) if config else 0.09
@@ -472,6 +663,7 @@ class PlateOCR:
                 "confidence": 0.0,
                 "variant_used": None,
                 "status": ResultStatus.OCR_FAILED.value,
+                "reason": "comparison error",
                 "validation_status": "EMPTY",
                 "validation_valid": False,
                 "state_code": None,
@@ -488,7 +680,7 @@ class PlateOCR:
                 "early_stop_reason": None,
             }
         
-        # Select best variant based on threshold (prefers valid plates)
+        # Select best variant based on threshold (prefers valid plates and cross-variant agreement)
         selection = VariantSelector.select_best_variant(comparison, threshold)
         
         selected_result = selection.get("selected_result", {})
@@ -497,6 +689,9 @@ class PlateOCR:
         raw_text = selected_result.get("text", "")
         ocr_confidence = selected_result.get("confidence", 0.0)
         variant_used = selected_result.get("variant_used")
+        final_status = selected_result.get("status", ResultStatus.NEEDS_REVIEW.value)
+        status_reason = selected_result.get("reason", "")
+        has_temp = selected_result.get("has_temp", False)
         
         # PHASE 2.3: Clean and validate text
         cleaning_result = TextCleaningPipeline.clean_ocr_text(raw_text)
@@ -532,23 +727,15 @@ class PlateOCR:
             correction_confidence
         )
 
-        # Status order:
-        # 1. empty text -> OCR_FAILED
-        # 2. original crop width < 80px -> LOW_RESOLUTION (still run OCR, never ACCEPTED)
-        # 3. valid format and state code -> ACCEPTED
-        # 4. otherwise -> NEEDS_REVIEW
         orig_crop_w = original_crop.shape[1]
         min_w_low_res = getattr(config, 'MIN_PLATE_WIDTH_FOR_LOW_RES', 80) if config else 80
-        acc_floor = getattr(config, 'ACCEPTANCE_CONFIDENCE_FLOOR', 0.5) if config else 0.5
 
         if not raw_text.strip() and not final_text.strip():
             final_status = ResultStatus.OCR_FAILED.value
+            status_reason = "empty text"
         elif orig_crop_w < min_w_low_res:
             final_status = ResultStatus.LOW_RESOLUTION.value
-        elif validation_valid and ocr_confidence >= acc_floor:
-            final_status = ResultStatus.ACCEPTED.value
-        else:
-            final_status = ResultStatus.NEEDS_REVIEW.value
+            status_reason = "low resolution"
         
         # Build result
         result = {
@@ -560,6 +747,7 @@ class PlateOCR:
             "confidence": ocr_confidence,
             "variant_used": variant_used,
             "status": final_status,
+            "reason": status_reason,
             "validation_status": validation_status,
             "validation_valid": validation_valid,
             "state_code": state_code,
@@ -584,14 +772,10 @@ class PlateOCR:
             result["cropped_image"] = original_crop
         
         # ── SMALL-CROP RECOVERY ──────────────────────────────────────────────
-        # When the normal pipeline did NOT produce a valid plate, attempt one
-        # additional OCR pass with stronger preprocessing (pad + 4× + CLAHE).
-        # Triggered only when:
-        #   - validation_valid is False, OR
-        #   - recognized text is suspiciously short (< 5 chars)
-        # Does NOT weaken validation — recovery result is only accepted when
-        # validation_valid=True on the recovered text.
+        text_before_recovery = final_text
+        status_before_recovery = final_status
         if not validation_valid or len(cleaned_text) < 5:
+            print(f"\n[OCR RECOVERY] Attempting recovery for plate with text: '{text_before_recovery}' (status: {status_before_recovery})")
             recovery = self._recover_small_crop(
                 plate_region,
                 threshold,
@@ -599,11 +783,21 @@ class PlateOCR:
                 base_calls=comparison.get("ocr_calls_made", 5)
             )
             if recovery is not None:
+                text_after_recovery = recovery.get("final_text", "")
+                if has_temp and recovery.get("status") == ResultStatus.ACCEPTED.value:
+                    recovery["status"] = ResultStatus.NEEDS_REVIEW.value
+                    recovery["reason"] = "contains TEMP"
+                status_after_recovery = recovery.get("status", "")
+                print(f"[OCR RECOVERY] Plate text BEFORE recovery: '{text_before_recovery}' -> AFTER recovery: '{text_after_recovery}'")
+                print(f"[OCR RECOVERY] What recovery changes: text updated from '{text_before_recovery}' to '{text_after_recovery}', status from '{status_before_recovery}' to '{status_after_recovery}', validation={recovery.get('validation_status')}")
                 result.update(recovery)
+                result["reason"] = recovery.get("reason", "recovered valid plate")
                 if return_all_variants and "all_variants" not in result:
                     result["all_variants"] = all_variants
                 if return_crop:
                     result["cropped_image"] = original_crop
+            else:
+                print(f"[OCR RECOVERY] Plate text BEFORE recovery: '{text_before_recovery}' -> AFTER recovery: '{text_before_recovery}' (recovery failed to produce valid plate; no changes)")
 
         return result
 

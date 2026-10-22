@@ -8,3 +8,8 @@ MIN_PLATE_HEIGHT_FOR_UPSCALE = 80  # pixels, target after upscale
 MAX_UPSCALE_FACTOR = 4.0
 ACCEPTANCE_CONFIDENCE_FLOOR = 0.5
 DEBUG = False
+
+# PaddleOCR Detector parameters
+DET_DB_THRESH = 0.2
+DET_DB_BOX_THRESH = 0.4
+DET_DB_UNCLIP_RATIO = 2.0

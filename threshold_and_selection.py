@@ -128,27 +128,63 @@ class VariantSelector:
                 []
             )
         
-        # Prefer variants that pass validate_plate
+        # Prefer variants that pass validate_plate and check cross-variant agreement
+        valid_groups = {}  # cleaned_text -> list of variants
         valid_variants = []
+        has_temp = comparison_result.get("has_temp", False)
+        
         for v in variants:
+            if v.get("has_temp", False):
+                has_temp = True
+            raw_t = v.get("text", "")
+            if "TEMP" in str(raw_t).upper():
+                has_temp = True
             if v.get("success", False):
-                t = v.get("text", "")
-                cleaned, is_v = validate_plate(t)
+                cleaned, is_v = validate_plate(raw_t)
                 v["is_valid"] = is_v
-                v["cleaned_text"] = cleaned if is_v else t
+                v["cleaned_text"] = cleaned if is_v else raw_t
                 if is_v:
                     valid_variants.append(v)
+                    valid_groups.setdefault(cleaned, []).append(v)
 
-        candidates = valid_variants if valid_variants else [v for v in variants if v.get("success", False)]
+        # Check for cross-variant agreement (at least 2 different variants agreeing on same text)
+        agreeing_group = None
+        for text_cand, group in valid_groups.items():
+            if len(group) >= 2:
+                agreeing_group = group
+                break
 
-        if candidates:
-            # Sort by confidence descending
-            candidates.sort(key=lambda x: x.get("confidence", 0.0), reverse=True)
-            best_variant = candidates[0]
+        reason = None
+        if agreeing_group:
+            # Sort agreeing variants by confidence descending
+            agreeing_group.sort(key=lambda x: x.get("confidence", 0.0), reverse=True)
+            best_variant = agreeing_group[0]
             best_confidence = best_variant.get("confidence", 0.0)
+            status = ResultStatus.ACCEPTED.value
+            reason = f"agreement ({len(agreeing_group)} variants)"
+        elif len(valid_variants) == 1:
+            best_variant = valid_variants[0]
+            best_confidence = best_variant.get("confidence", 0.0)
+            status = ResultStatus.NEEDS_REVIEW.value
+            reason = "single variant"
+        elif len(valid_variants) > 1:
+            # Multiple valid variants but no 2 agreed on the exact same plate
+            valid_variants.sort(key=lambda x: x.get("confidence", 0.0), reverse=True)
+            best_variant = valid_variants[0]
+            best_confidence = best_variant.get("confidence", 0.0)
+            status = ResultStatus.NEEDS_REVIEW.value
+            reason = "no agreement"
         else:
-            best_variant = None
-            best_confidence = -1.0
+            successful = [v for v in variants if v.get("success", False)]
+            if successful:
+                successful.sort(key=lambda x: x.get("confidence", 0.0), reverse=True)
+                best_variant = successful[0]
+                best_confidence = best_variant.get("confidence", 0.0)
+            else:
+                best_variant = None
+                best_confidence = -1.0
+            status = ResultStatus.NEEDS_REVIEW.value
+            reason = "invalid plate format"
 
         # If no successful variant found
         if best_variant is None:
@@ -158,17 +194,23 @@ class VariantSelector:
                 variants
             )
 
-        # Status determination
+        # Confidence floor check
         acc_floor = getattr(config, 'ACCEPTANCE_CONFIDENCE_FLOOR', 0.5) if config else 0.5
-        is_valid = best_variant.get("is_valid", False)
         raw_text = best_variant.get("text", "")
 
         if not raw_text.strip():
             status = ResultStatus.OCR_FAILED.value
-        elif is_valid and best_confidence >= acc_floor:
-            status = ResultStatus.ACCEPTED.value
-        else:
+            reason = "empty text"
+        elif best_confidence < acc_floor and status == ResultStatus.ACCEPTED.value:
+            status = ResultStatus.LOW_CONFIDENCE.value
+            reason = "low confidence"
+
+        # Cap at NEEDS_REVIEW if TEMP appears in any raw OCR line
+        if has_temp and status == ResultStatus.ACCEPTED.value:
             status = ResultStatus.NEEDS_REVIEW.value
+            reason = "contains TEMP"
+        elif has_temp and reason:
+            reason = f"{reason} (contains TEMP)"
 
         # Count variants above threshold
         above_threshold = sum(
@@ -181,7 +223,9 @@ class VariantSelector:
                 "text": best_variant.get("text", ""),
                 "confidence": round(best_confidence, 4),
                 "variant_used": best_variant.get("variant", None),
-                "status": status
+                "status": status,
+                "reason": reason,
+                "has_temp": has_temp,
             },
             "all_variants": [
                 {
@@ -194,7 +238,9 @@ class VariantSelector:
             ],
             "threshold_used": threshold,
             "best_available_confidence": round(best_confidence, 4),
-            "variants_above_threshold": above_threshold
+            "variants_above_threshold": above_threshold,
+            "reason": reason,
+            "has_temp": has_temp,
         }
     
     @staticmethod
