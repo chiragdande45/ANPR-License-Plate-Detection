@@ -1,799 +1,859 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" x-data="anprApp()" :class="{ 'dark': darkMode }" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ANPR License Plate Detector</title>
+    <title>ANPR - Indian License Plate Recognition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        },
+                        status: {
+                            accepted: '#16a34a',
+                            review: '#d97706',
+                            lowres: '#ea580c',
+                            failed: '#dc2626',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Consolas', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Alpine.js CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Google Fonts Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1050px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 35px 25px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 2.3em;
-            margin-bottom: 8px;
-        }
-
-        .header p {
-            font-size: 1.05em;
-            opacity: 0.95;
-        }
-
-        .content {
-            padding: 35px;
-        }
-
-        .upload-box {
-            border: 3px dashed #667eea;
-            border-radius: 12px;
-            padding: 35px 20px;
-            text-align: center;
-            background: #f8f9ff;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .upload-box:hover {
-            border-color: #764ba2;
-            background: #f0f1ff;
-        }
-
-        .upload-box.dragover {
-            border-color: #28a745;
-            background: #e8f9ee;
-            transform: scale(1.01);
-        }
-
-        .upload-box input {
-            display: none;
-        }
-
-        .selected-badge {
-            display: inline-block;
-            background: #667eea;
-            color: white;
-            padding: 5px 14px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            margin-top: 10px;
-            font-weight: 600;
-        }
-
-        .preview-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-            gap: 12px;
-            margin-top: 20px;
-            max-height: 250px;
-            overflow-y: auto;
-            padding: 10px;
-            background: #fbfbfd;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-        }
-
-        .preview-item {
-            position: relative;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .preview-item img {
-            width: 100%;
-            height: 85px;
-            object-fit: cover;
-        }
-
-        .preview-item .preview-name {
-            font-size: 0.75em;
-            padding: 4px 6px;
-            color: #444;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            background: #fdfdfd;
-        }
-
-        .preview-item .remove-btn {
-            position: absolute;
-            top: 3px;
-            right: 3px;
-            background: rgba(220, 53, 69, 0.9);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            font-size: 12px;
-            line-height: 18px;
-            cursor: pointer;
-            text-align: center;
-            font-weight: bold;
-        }
-
-        .controls {
-            display: flex;
-            gap: 15px;
-            margin: 25px 0 15px 0;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .control-group label {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .control-group input {
-            width: 90px;
-            padding: 8px 12px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-size: 0.95em;
-        }
-
-        .btn {
-            padding: 12px 28px;
-            border: none;
-            border-radius: 6px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .btn-secondary {
-            background: #edf2f7;
-            color: #4a5568;
-        }
-
-        .btn-secondary:hover {
-            background: #e2e8f0;
-        }
-
-        .message {
-            padding: 14px 18px;
-            border-radius: 6px;
-            margin: 15px 0;
-            display: none;
-            font-weight: 500;
-        }
-
-        .message.show {
-            display: block;
-        }
-
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .message.info {
-            background: #e2e3e5;
-            color: #383d41;
-            border: 1px solid #d6d8db;
-        }
-
-        .progress-bar-container {
-            width: 100%;
-            height: 10px;
-            background: #e2e8f0;
-            border-radius: 5px;
-            overflow: hidden;
-            margin: 15px 0;
-            display: none;
-        }
-
-        .progress-bar {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            transition: width 0.3s ease;
-        }
-
-        .card-result {
-            margin-top: 35px;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            background: #ffffff;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.06);
-            overflow: hidden;
-        }
-
-        .card-header {
-            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
-            color: white;
-            padding: 16px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .card-header h3 {
-            font-size: 1.15em;
-            word-break: break-all;
-        }
-
-        .card-body {
-            padding: 24px;
-        }
-
-        .result-image {
-            max-width: 100%;
-            max-height: 480px;
-            border-radius: 8px;
-            margin: 15px 0 25px 0;
-            display: block;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-
-        .stat {
-            background: #f8fafc;
-            padding: 16px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-        }
-
-        .stat-label {
-            color: #718096;
-            font-size: 0.85em;
+        [x-cloak] { display: none !important; }
+        .plate-font {
+            letter-spacing: 0.12em;
             text-transform: uppercase;
-            font-weight: 600;
         }
-
-        .stat-value {
-            color: #2d3748;
-            font-size: 1.6em;
-            font-weight: bold;
-            margin-top: 4px;
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
         }
-
-        .no-detections {
-            text-align: center;
-            padding: 30px;
-            color: #718096;
-            background: #f7fafc;
-            border-radius: 8px;
-            font-weight: 500;
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
         }
-
-        .plate-box {
-            margin-bottom: 25px;
-            border: 2px solid #667eea;
-            border-radius: 10px;
-            overflow: hidden;
-            background: #ffffff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        }
-
-        .plate-box-header {
-            background: #667eea;
-            color: white;
-            padding: 12px 18px;
-            font-weight: 600;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .plate-box-content {
-            padding: 20px;
-        }
-
-        .variant-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            font-size: 0.88em;
-        }
-
-        .variant-table th, .variant-table td {
-            border: 1px solid #e2e8f0;
-            padding: 8px 10px;
-            text-align: left;
-        }
-
-        .variant-table th {
-            background: #edf2f7;
-            color: #4a5568;
-        }
-
-        .btn-toggle-variants {
-            background: #edf2f7;
-            border: 1px solid #cbd5e0;
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.3);
             border-radius: 4px;
-            padding: 6px 14px;
-            font-size: 0.85em;
-            cursor: pointer;
-            font-weight: 600;
-            color: #4a5568;
-            margin-top: 10px;
-        }
-
-        .btn-toggle-variants:hover {
-            background: #e2e8f0;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🚗 ANPR License Plate Detector</h1>
-            <p>Upload single or multiple images to detect and analyze license plates</p>
+<body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans antialiased flex flex-col md:flex-row custom-scrollbar"
+      @keydown.escape.window="closeZoomModal()"
+      @paste.window="handlePaste($event)">
+
+    <!-- Mobile Header -->
+    <div class="md:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold text-sm shadow">
+                NP
+            </div>
+            <span class="font-bold text-base tracking-tight text-slate-900 dark:text-white">ANPR Intelligence</span>
         </div>
-
-        <div class="content">
-            <div id="message" class="message"></div>
-            <div id="progressBarContainer" class="progress-bar-container">
-                <div id="progressBar" class="progress-bar"></div>
-            </div>
-
-            <div class="upload-box" id="uploadBox">
-                <div style="font-size: 3em; margin-bottom: 10px;">📸</div>
-                <h3>Click to upload or drag & drop image(s)</h3>
-                <p style="color: #666; margin-top: 6px;">Select one or multiple images (JPG, JPEG, PNG, BMP, WEBP)</p>
-                <div id="selectedCountBadge" class="selected-badge" style="display: none;">0 images selected</div>
-                <input type="file" id="fileInput" accept="image/*,.jpg,.jpeg,.png,.bmp,.webp" multiple>
-            </div>
-
-            <div id="previewGrid" class="preview-grid" style="display: none;"></div>
-
-            <div class="controls">
-                <div class="control-group">
-                    <label for="confidence">Confidence Threshold:</label>
-                    <input type="number" id="confidence" min="0" max="1" step="0.05" value="0.25">
-                </div>
-                <button class="btn btn-primary" id="testBtn">Test Images</button>
-                <button class="btn btn-secondary" id="clearBtn">Clear All</button>
-            </div>
-
-            <div id="allResultsContainer"></div>
+        <div class="flex items-center space-x-2">
+            <button @click="toggleDarkMode()" aria-label="Toggle dark mode"
+                    class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                <svg x-show="darkMode" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 9H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            </button>
+            <button @click="mobileMenuOpen = !mobileMenuOpen" aria-label="Toggle navigation menu"
+                    class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
         </div>
     </div>
 
-    <script>
-        const uploadBox = document.getElementById('uploadBox');
-        const fileInput = document.getElementById('fileInput');
-        const testBtn = document.getElementById('testBtn');
-        const clearBtn = document.getElementById('clearBtn');
-        const messageEl = document.getElementById('message');
-        const previewGrid = document.getElementById('previewGrid');
-        const selectedCountBadge = document.getElementById('selectedCountBadge');
-        const allResultsContainer = document.getElementById('allResultsContainer');
-        const confidenceInput = document.getElementById('confidence');
-        const progressBarContainer = document.getElementById('progressBarContainer');
-        const progressBar = document.getElementById('progressBar');
-
-        let selectedFiles = [];
-
-        function isImageFile(file) {
-            if (file.type && file.type.startsWith('image/')) return true;
-            const ext = file.name.split('.').pop().toLowerCase();
-            return ['jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif', 'tiff'].includes(ext);
-        }
-
-        function updateSelectionUI() {
-            previewGrid.innerHTML = '';
-            if (selectedFiles.length === 0) {
-                previewGrid.style.display = 'none';
-                selectedCountBadge.style.display = 'none';
-                return;
-            }
-
-            selectedCountBadge.style.display = 'inline-block';
-            selectedCountBadge.textContent = `${selectedFiles.length} image${selectedFiles.length > 1 ? 's' : ''} selected`;
-            previewGrid.style.display = 'grid';
-
-            selectedFiles.forEach((file, index) => {
-                const item = document.createElement('div');
-                item.className = 'preview-item';
-
-                const img = document.createElement('img');
-                img.alt = file.name;
-                const objectUrl = URL.createObjectURL(file);
-                img.src = objectUrl;
-
-                const nameDiv = document.createElement('div');
-                nameDiv.className = 'preview-name';
-                nameDiv.textContent = file.name;
-                nameDiv.title = file.name;
-
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'remove-btn';
-                removeBtn.innerHTML = '×';
-                removeBtn.title = 'Remove';
-                removeBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    URL.revokeObjectURL(objectUrl);
-                    selectedFiles.splice(index, 1);
-                    updateSelectionUI();
-                };
-
-                item.appendChild(removeBtn);
-                item.appendChild(img);
-                item.appendChild(nameDiv);
-                previewGrid.appendChild(item);
-            });
-        }
-
-        function addFiles(files) {
-            const newFiles = Array.from(files).filter(isImageFile);
-            if (newFiles.length === 0) {
-                showMessage('No valid image files found', 'error');
-                return;
-            }
-
-            // Append unique files by name and size
-            for (const nf of newFiles) {
-                const exists = selectedFiles.some(f => f.name === nf.name && f.size === nf.size);
-                if (!exists) {
-                    selectedFiles.push(nf);
-                }
-            }
-
-            updateSelectionUI();
-            showMessage(`Selected ${selectedFiles.length} image(s)`, 'success');
-        }
-
-        uploadBox.addEventListener('click', () => {
-            fileInput.value = '';
-            fileInput.click();
-        });
-
-        uploadBox.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadBox.classList.add('dragover');
-        });
-
-        uploadBox.addEventListener('dragleave', (e) => {
-            uploadBox.classList.remove('dragover');
-        });
-
-        uploadBox.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadBox.classList.remove('dragover');
-            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                addFiles(e.dataTransfer.files);
-            }
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-                addFiles(e.target.files);
-            }
-        });
-
-        function toggleVariants(button) {
-            const variantsList = button.nextElementSibling;
-            const isHidden = variantsList.style.display === 'none';
-            variantsList.style.display = isHidden ? 'block' : 'none';
-            button.textContent = isHidden ? '▲ Hide All Variants' : '▼ Show All Variants';
-        }
-
-        testBtn.addEventListener('click', async () => {
-            if (selectedFiles.length === 0) {
-                showMessage('Please select at least one image first', 'error');
-                return;
-            }
-
-            testBtn.disabled = true;
-            allResultsContainer.innerHTML = '';
-            progressBarContainer.style.display = 'block';
-            progressBar.style.width = '0%';
-
-            const total = selectedFiles.length;
-            let successCount = 0;
-
-            for (let i = 0; i < total; i++) {
-                const file = selectedFiles[i];
-                const pct = Math.round(((i) / total) * 100);
-                progressBar.style.width = pct + '%';
-                showMessage(`Processing image ${i + 1} of ${total}: ${file.name}...`, 'info');
-
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('confidence', confidenceInput.value);
-
-                try {
-                    const response = await fetch('/api/test', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (!response.ok) {
-                        const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-                        displayError(file.name, errData.error || `Server returned error ${response.status}`);
-                    } else {
-                        const data = await response.json();
-                        if (data.error) {
-                            displayError(file.name, data.error);
-                        } else {
-                            displayResults(file.name, i + 1, data);
-                            successCount++;
-                        }
-                    }
-                } catch (err) {
-                    displayError(file.name, 'Network error: ' + err.message);
-                }
-            }
-
-            progressBar.style.width = '100%';
-            setTimeout(() => {
-                progressBarContainer.style.display = 'none';
-            }, 1000);
-
-            testBtn.disabled = false;
-            showMessage(`Done! Successfully processed ${successCount} of ${total} image(s).`, successCount === total ? 'success' : 'info');
-        });
-
-        function displayError(filename, err) {
-            const div = document.createElement('div');
-            div.className = 'card-result';
-            div.innerHTML = `
-                <div class="card-header" style="background: #dc3545;">
-                    <h3>${escapeHtml(filename)}</h3>
-                    <span>FAILED</span>
+    <!-- Sidebar -->
+    <aside :class="{ 'translate-x-0': mobileMenuOpen, '-translate-x-full': !mobileMenuOpen }"
+           class="fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-transform duration-200 ease-in-out md:static md:translate-x-0 shrink-0">
+        <!-- Logo -->
+        <div class="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800 justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-700 to-brand-500 text-white flex items-center justify-center font-bold text-base shadow-md shadow-brand-500/20">
+                    NP
                 </div>
-                <div class="card-body">
-                    <p style="color: #dc3545; font-weight: 600;">Error: ${escapeHtml(err)}</p>
+                <div>
+                    <h1 class="font-bold text-sm leading-tight text-slate-900 dark:text-white">AutoPlate ANPR</h1>
+                    <p class="text-[11px] text-slate-500 font-medium">Vision & OCR Pipeline v2</p>
                 </div>
-            `;
-            allResultsContainer.appendChild(div);
-        }
+            </div>
+            <button @click="mobileMenuOpen = false" class="md:hidden text-slate-400 hover:text-slate-600 dark:hover:text-white" aria-label="Close sidebar">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
 
-        function displayResults(filename, itemNum, data) {
-            const card = document.createElement('div');
-            card.className = 'card-result';
+        <!-- Navigation Links -->
+        <nav class="flex-1 px-4 py-5 space-y-1.5" aria-label="Main Navigation">
+            <!-- Active Detect Page -->
+            <a href="#" class="flex items-center px-3.5 py-2.5 text-sm font-semibold rounded-xl bg-brand-50 dark:bg-brand-950/50 text-brand-700 dark:text-brand-300 border border-brand-200/50 dark:border-brand-800/40">
+                <svg class="w-5 h-5 mr-3 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Detect Plates
+            </a>
 
-            let avgConfFormatted = (data.avg_confidence * 100).toFixed(1);
-            let detectionsCount = data.detections || 0;
-
-            let html = `
-                <div class="card-header">
-                    <h3>#${itemNum} — ${escapeHtml(filename)}</h3>
-                    <span style="font-size: 0.9em; opacity: 0.9;">${detectionsCount} Plate${detectionsCount !== 1 ? 's' : ''} Detected</span>
+            <!-- Disabled Navigation Items with Tooltip -->
+            <template x-for="item in disabledNavItems" :key="item.name">
+                <div class="relative group">
+                    <button disabled aria-label="Navigation item coming soon"
+                            class="w-full flex items-center px-3.5 py-2.5 text-sm font-medium rounded-xl text-slate-400 dark:text-slate-500 cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <span x-html="item.icon" class="w-5 h-5 mr-3 opacity-60"></span>
+                        <span x-text="item.name"></span>
+                        <span class="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">SOON</span>
+                    </button>
+                    <!-- Tooltip -->
+                    <div class="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-slate-800 text-white text-xs rounded-md shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50">
+                        Coming soon
+                    </div>
                 </div>
-                <div class="card-body">
-                    <img src="${data.result_image}" class="result-image" alt="Detection Result">
+            </template>
+        </nav>
 
-                    <div class="stats">
-                        <div class="stat">
-                            <div class="stat-label">Plates Detected</div>
-                            <div class="stat-value">${detectionsCount}</div>
+        <!-- System Status Footer -->
+        <div class="p-4 border-t border-slate-200 dark:border-slate-800">
+            <div class="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-medium">PaddleOCR + YOLO v2 Active</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">CPU Inference Mode</p>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto custom-scrollbar">
+        <!-- Top bar -->
+        <header class="h-16 hidden md:flex items-center justify-between px-8 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shrink-0">
+            <div>
+                <h2 class="text-base font-bold text-slate-900 dark:text-white">License Plate Recognition</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Batch detection, cross-variant validation, and Indian plate parsing</p>
+            </div>
+            <div class="flex items-center space-x-3">
+                <!-- Dark mode toggle -->
+                <button @click="toggleDarkMode()"
+                        :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                        class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        aria-label="Toggle dark mode theme">
+                    <svg x-show="!darkMode" class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 9H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <svg x-show="darkMode" x-cloak class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                    <span x-text="darkMode ? 'Dark' : 'Light'"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Page Body -->
+        <main class="flex-1 p-4 md:p-8 max-w-6xl w-full mx-auto space-y-6">
+
+            <!-- Section 1: Upload & Input Area -->
+            <section class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 p-6 space-y-5" aria-labelledby="upload-heading">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <h3 id="upload-heading" class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>Image Input & Batch Processing</span>
+                        </h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Upload up to 10 vehicle images (JPG, PNG, WEBP, max 10MB each). Paste or drag & drop.</p>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex items-center space-x-2 shrink-0">
+                        <button type="button" @click="clearAllFiles()"
+                                x-show="selectedFiles.length > 0" x-cloak
+                                class="px-3.5 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition">
+                            Clear all
+                        </button>
+                        <button type="button" @click="startDetection()"
+                                :disabled="selectedFiles.length === 0 || isProcessing"
+                                class="flex items-center space-x-2 px-5 py-2 text-xs font-semibold rounded-xl text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm shadow-brand-500/25 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <svg x-show="isProcessing" class="animate-spin -ml-1 mr-1 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                            <svg x-show="!isProcessing" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span x-text="isProcessing ? 'Processing...' : 'Detect plates (' + selectedFiles.length + ')'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Drag & Drop Zone -->
+                <div @dragover.prevent="dragOver = true"
+                     @dragleave.prevent="dragOver = false"
+                     @drop.prevent="handleDrop($event)"
+                     :class="{ 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/20 ring-2 ring-brand-500/30': dragOver, 'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20': !dragOver }"
+                     class="border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer relative group"
+                     @click="$refs.fileInput.click()">
+                    
+                    <input type="file" x-ref="fileInput" multiple accept=".jpg,.jpeg,.png,.webp" class="hidden" @change="handleFileSelect($event)">
+                    
+                    <div class="flex flex-col items-center justify-center space-y-2 pointer-events-none">
+                        <div class="w-12 h-12 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
                         </div>
-                        <div class="stat">
-                            <div class="stat-label">Avg Confidence</div>
-                            <div class="stat-value">${avgConfFormatted}%</div>
+                        <div class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                            Drag & drop files here, <span class="text-brand-600 dark:text-brand-400 underline">browse</span> or paste (Ctrl+V)
                         </div>
-                        <div class="stat">
-                            <div class="stat-label">Image Size</div>
-                            <div class="stat-value">${escapeHtml(data.image_size || 'N/A')}</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-label">Accepted</div>
-                            <div class="stat-value" style="color: ${data.accepted_count > 0 ? '#28a745' : '#e2e8f0'}">${data.accepted_count !== undefined ? data.accepted_count : (data.recognized_count || 0)}</div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Supported: JPG, JPEG, PNG, WEBP (Max 10 MB per file, max 10 files)</p>
+                    </div>
+                </div>
+
+                <!-- Client-side Validation Error Banner -->
+                <div x-show="errorMessage" x-cloak
+                     class="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span x-text="errorMessage"></span>
+                    </div>
+                    <button @click="errorMessage = ''" class="text-red-500 hover:text-red-700" aria-label="Dismiss error">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <!-- Selected Files Thumbnails Pre-processing -->
+                <div x-show="selectedFiles.length > 0" x-cloak class="space-y-2">
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        <span>Selected Queue (<span x-text="selectedFiles.length"></span>/10)</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                        <template x-for="(fileItem, idx) in selectedFiles" :key="idx">
+                            <div class="relative group bg-slate-50 dark:bg-slate-800 rounded-xl p-2 border border-slate-200 dark:border-slate-700 flex flex-col items-center">
+                                <img :src="fileItem.preview" :alt="fileItem.name" class="w-full h-20 object-cover rounded-lg bg-slate-200 dark:bg-slate-900">
+                                <div class="w-full mt-2 text-left">
+                                    <p class="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate" :title="fileItem.name" x-text="fileItem.name"></p>
+                                    <p class="text-[10px] text-slate-400" x-text="formatFileSize(fileItem.size)"></p>
+                                </div>
+                                <button type="button" @click.stop="removeFile(idx)" aria-label="Remove image from queue"
+                                        class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-800 hover:bg-red-600 text-white flex items-center justify-center text-xs shadow transition">
+                                    &times;
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- "Try a sample" row -->
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1">Try a sample:</span>
+                    <button type="button" @click="loadSample('sample_mh14_jeep.jpg', 'Jeep MH14 (Multi-line + IND)')"
+                            :disabled="isProcessing"
+                            class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700">
+                        <span>🚙 Jeep (MH14GN9239)</span>
+                    </button>
+                    <button type="button" @click="loadSample('sample_hr99_hyundai.jpg', 'Hyundai HR99BJ (TEMP Plate)')"
+                            :disabled="isProcessing"
+                            class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700">
+                        <span>🚗 Hyundai (HR99BJ6662 TEMP)</span>
+                    </button>
+                    <button type="button" @click="loadSample('sample_gj01_tilted.jpg', 'Tilted Plate (GJ01MW7581)')"
+                            :disabled="isProcessing"
+                            class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700">
+                        <span>📐 Tilted (GJ01MW7581 Deskew)</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Processing Banner & Skeleton -->
+            <div x-show="isProcessing" x-cloak class="space-y-4">
+                <div class="p-4 bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800/60 rounded-xl flex items-center space-x-3 text-brand-700 dark:text-brand-300">
+                    <svg class="animate-spin h-5 w-5 text-brand-600 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                    <div>
+                        <p class="text-sm font-semibold">Running YOLO Detection & PaddleOCR Preprocessing variants...</p>
+                        <p class="text-xs text-brand-600 dark:text-brand-400">This can take a few seconds on CPU</p>
+                    </div>
+                </div>
+                <!-- Skeleton cards -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 animate-pulse space-y-4">
+                    <div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="h-48 bg-slate-100 dark:bg-slate-800 rounded-xl"></div>
+                        <div class="space-y-3">
+                            <div class="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg"></div>
+                            <div class="h-6 bg-slate-100 dark:bg-slate-800 rounded w-1/2"></div>
+                            <div class="h-4 bg-slate-100 dark:bg-slate-800 rounded w-3/4"></div>
                         </div>
                     </div>
-            `;
+                </div>
+            </div>
 
-            let detectionsHtml = '';
-            if (!data.plates || data.plates.length === 0) {
-                detectionsHtml = '<div class="no-detections">No license plates detected in this image.</div>';
-            } else {
-                data.plates.forEach(plate => {
-                    const conf = (plate.confidence * 100).toFixed(1);
-                    const ocr = plate.ocr || {};
-                    const ocrConf = ((ocr.confidence || 0) * 100).toFixed(1);
-                    const status = ocr.status || 'UNKNOWN';
+            <!-- Section 2: Summary Bar -->
+            <section x-show="batchResult && !isProcessing" x-cloak
+                     class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 p-5 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Batch Processing Summary</h3>
+                    <!-- Export Actions -->
+                    <div class="flex items-center space-x-2">
+                        <a :href="'/api/export/' + batchResult?.batch_id + '.csv'" download
+                           class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200 dark:border-slate-700">
+                            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            <span>Download CSV</span>
+                        </a>
+                        <a :href="'/api/export/' + batchResult?.batch_id + '.json'" download
+                           class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200 dark:border-slate-700">
+                            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            <span>Download JSON</span>
+                        </a>
+                    </div>
+                </div>
 
-                    let badgeColor = '#6c757d';
-                    let statusLabel = status;
-                    if (status === 'ACCEPTED') {
-                        badgeColor = '#28a745';
-                        statusLabel = '✓ ACCEPTED';
-                    } else if (status === 'NEEDS_REVIEW') {
-                        badgeColor = '#fd7e14';
-                        statusLabel = '⚠ NEEDS REVIEW';
-                    } else if (status === 'LOW_RESOLUTION') {
-                        badgeColor = '#ffc107';
-                        statusLabel = '🔍 LOW RESOLUTION';
-                    } else if (status === 'LOW_CONFIDENCE') {
-                        badgeColor = '#ffc107';
-                        statusLabel = '⚠ LOW CONFIDENCE';
-                    } else if (status === 'OCR_FAILED' || status === 'FAILED') {
-                        badgeColor = '#dc3545';
-                        statusLabel = '✗ OCR FAILED';
-                    } else if (status === 'DETECTION_FAILED') {
-                        badgeColor = '#6c757d';
-                        statusLabel = '✗ DETECTION FAILED';
-                    }
+                <!-- Stats Tiles -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
+                    <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Images</div>
+                        <div class="text-xl font-bold text-slate-900 dark:text-white mt-0.5" x-text="batchResult?.summary?.total_images || 0"></div>
+                    </div>
+                    <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Plates Detected</div>
+                        <div class="text-xl font-bold text-slate-900 dark:text-white mt-0.5" x-text="batchResult?.summary?.total_plates || 0"></div>
+                    </div>
+                    <div class="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                        <div class="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                            <span>Accepted</span>
+                        </div>
+                        <div class="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5" x-text="batchResult?.summary?.accepted || 0"></div>
+                    </div>
+                    <div class="p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl border border-amber-100 dark:border-amber-900/40">
+                        <div class="text-[11px] font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <span>Needs Review</span>
+                        </div>
+                        <div class="text-xl font-bold text-amber-700 dark:text-amber-300 mt-0.5" x-text="batchResult?.summary?.needs_review || 0"></div>
+                    </div>
+                    <div class="p-3 bg-orange-50/50 dark:bg-orange-950/20 rounded-xl border border-orange-100 dark:border-orange-900/40">
+                        <div class="text-[11px] font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1">
+                            <span>Low Res</span>
+                        </div>
+                        <div class="text-xl font-bold text-orange-700 dark:text-orange-300 mt-0.5" x-text="batchResult?.summary?.low_resolution || 0"></div>
+                    </div>
+                    <div class="p-3 bg-red-50/50 dark:bg-red-950/20 rounded-xl border border-red-100 dark:border-red-900/40">
+                        <div class="text-[11px] font-medium text-red-700 dark:text-red-400 flex items-center gap-1">
+                            <span>Failed</span>
+                        </div>
+                        <div class="text-xl font-bold text-red-700 dark:text-red-300 mt-0.5" x-text="batchResult?.summary?.failed || 0"></div>
+                    </div>
+                    <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Total Time</div>
+                        <div class="text-xl font-bold text-slate-900 dark:text-white mt-0.5"><span x-text="batchResult?.summary?.total_seconds || 0"></span><span class="text-xs font-normal text-slate-400 ml-0.5">s</span></div>
+                    </div>
+                </div>
+            </section>
 
-                    // Variants table if present
-                    let variantsHtml = '';
-                    if (ocr.all_variants && ocr.all_variants.length > 0) {
-                        let rows = '';
-                        ocr.all_variants.forEach((v, idx) => {
-                            const isSelected = v.name === ocr.variant_used || (ocr.recovery_applied && v.name === ocr.recovery_variant);
-                            rows += `
-                                <tr style="${isSelected ? 'background: #e6fffa; font-weight: bold;' : ''}">
-                                    <td>${idx + 1}</td>
-                                    <td>${escapeHtml(v.name || 'default')}</td>
-                                    <td><code>${escapeHtml(v.text || '-')}</code></td>
-                                    <td>${((v.confidence || 0) * 100).toFixed(1)}%</td>
-                                    <td>${v.is_valid_format ? '✓ Yes' : '✗ No'}</td>
-                                    <td>${isSelected ? '★ SELECTED' : ''}</td>
-                                </tr>
-                            `;
-                        });
-
-                        variantsHtml = `
-                            <button class="btn-toggle-variants" onclick="toggleVariants(this)">▼ Show All Variants (${ocr.all_variants.length})</button>
-                            <div style="display: none; margin-top: 10px; overflow-x: auto;">
-                                <table class="variant-table">
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Preprocessing Variant</th>
-                                            <th>Text</th>
-                                            <th>Confidence</th>
-                                            <th>Valid Format</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${rows}
-                                    </tbody>
-                                </table>
+            <!-- Section 3: Result Cards (One per image) -->
+            <section x-show="batchResult && batchResult.images && !isProcessing" x-cloak class="space-y-6">
+                <template x-for="(imgItem, imgIdx) in (batchResult?.images || [])" :key="imgIdx">
+                    <article class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden transition-all duration-200">
+                        <!-- Card Header -->
+                        <div class="px-6 py-4 bg-slate-50/70 dark:bg-slate-850 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center space-x-2.5">
+                                <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300" x-text="'#' + (imgIdx + 1)"></span>
+                                <span class="text-sm font-bold text-slate-900 dark:text-white" x-text="imgItem.image_name"></span>
+                                <span class="text-xs text-slate-400 font-mono" x-text="'(' + imgItem.width + ' × ' + imgItem.height + 'px)'"></span>
                             </div>
-                        `;
-                    }
-
-                    detectionsHtml += `
-                        <div class="plate-box">
-                            <div class="plate-box-header">
-                                <span>Plate #${plate.id}</span>
-                                <span>YOLO Conf: ${conf}%</span>
+                            <div class="flex items-center space-x-4 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                <span class="flex items-center gap-1">
+                                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                    <strong class="text-slate-800 dark:text-slate-200" x-text="imgItem.plates ? imgItem.plates.length : 0"></strong> plate(s)
+                                </span>
+                                <span>•</span>
+                                <span class="flex items-center gap-1">
+                                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <span x-text="imgItem.processing_seconds"></span>s
+                                </span>
                             </div>
-                            <div class="plate-box-content">
-                                <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 18px;">
-                                    ${plate.cropped_image ? `
-                                        <div>
-                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px; font-weight: 600;">Cropped Plate:</div>
-                                            <img src="${plate.cropped_image}" style="max-height: 80px; border: 1px solid #ddd; border-radius: 4px; padding: 2px; background: #fafafa;">
-                                        </div>
-                                    ` : ''}
-                                    <div style="flex: 1; min-width: 200px;">
-                                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
-                                            <span style="background: ${badgeColor}; color: ${badgeColor === '#ffc107' ? '#222' : '#fff'}; padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold;">
-                                                ${statusLabel}
-                                            </span>
-                                            ${ocr.state_code ? `
-                                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: 600;">
-                                                    State: ${escapeHtml(ocr.state_code)}
-                                                </span>
-                                            ` : ''}
-                                            ${ocr.quality_tier ? `
-                                                <span style="background: #edf2f7; color: #4a5568; padding: 4px 10px; border-radius: 4px; font-size: 0.85em;">
-                                                    Quality: ${escapeHtml(ocr.quality_tier)}
-                                                </span>
-                                            ` : ''}
-                                        </div>
+                        </div>
 
-                                        <div style="background: #f7fafc; padding: 12px 16px; border-radius: 6px; border-left: 4px solid #667eea;">
-                                            <div style="font-size: 0.8em; color: #718096; text-transform: uppercase; font-weight: 600;">Recognized License Plate</div>
-                                            <div style="font-size: 1.6em; font-weight: bold; font-family: monospace; color: #2d3748; letter-spacing: 1.5px; margin: 4px 0;">
-                                                ${escapeHtml(ocr.text || ocr.final_text || '(No text)')}
-                                            </div>
-                                            <div style="font-size: 0.85em; color: #4a5568;">
-                                                OCR Confidence: <strong>${ocrConf}%</strong>
-                                                ${ocr.variant_used ? ` &bull; Pipeline: <em>${escapeHtml(ocr.variant_used)}</em>` : ''}
-                                                ${ocr.recovery_applied ? ` <span style="color: #2b6cb0; font-weight: 600;">(Recovery Applied)</span>` : ''}
-                                            </div>
+                        <!-- Card Body -->
+                        <div class="p-6">
+                            <!-- Image Processing Error State -->
+                            <div x-show="imgItem.error" class="p-4 bg-red-50 dark:bg-red-950/30 rounded-xl text-red-700 dark:text-red-300 text-sm flex items-center justify-between">
+                                <span x-text="imgItem.error"></span>
+                                <button type="button" @click="retryImage(imgItem.image_name)" class="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-semibold">Retry</button>
+                            </div>
+
+                            <!-- Normal State -->
+                            <div x-show="!imgItem.error" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                                <!-- Left Column: Annotated Image -->
+                                <div class="lg:col-span-5 flex flex-col space-y-2">
+                                    <div class="relative rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 group">
+                                        <img :src="imgItem.annotated_url" :alt="'Annotated detection for ' + imgItem.image_name"
+                                             class="w-full h-auto max-h-[360px] object-contain mx-auto cursor-pointer"
+                                             @click="openZoomModal(imgItem.annotated_url, imgItem.image_name)">
+                                        <div class="absolute bottom-2 right-2 bg-slate-900/80 backdrop-blur-sm text-white px-2 py-1 rounded text-[11px] font-medium opacity-0 group-hover:opacity-100 transition pointer-events-none flex items-center gap-1">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/></svg>
+                                            Click to zoom
                                         </div>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-slate-400">Bounding boxes color-coded by validation status</span>
+                                        <a :href="imgItem.annotated_url" download class="text-xs text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                            Download annotated
+                                        </a>
                                     </div>
                                 </div>
 
-                                ${variantsHtml}
+                                <!-- Right Column: Detected Plates List -->
+                                <div class="lg:col-span-7 flex flex-col space-y-4">
+                                    <!-- Empty State (0 plates) -->
+                                    <div x-show="!imgItem.plates || imgItem.plates.length === 0" class="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+                                        <svg class="w-10 h-10 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">No plate found</p>
+                                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Try a closer, sharper photo with the plate facing the camera.</p>
+                                    </div>
+
+                                    <!-- Plates Listing -->
+                                    <template x-for="(plate, pIdx) in (imgItem.plates || [])" :key="pIdx">
+                                        <div class="p-4 rounded-xl border transition-all"
+                                             :class="{
+                                                 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10': plate.status === 'ACCEPTED',
+                                                 'border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10': plate.status === 'NEEDS_REVIEW',
+                                                 'border-orange-200 dark:border-orange-900/60 bg-orange-50/20 dark:bg-orange-950/10': plate.status === 'LOW_RESOLUTION',
+                                                 'border-red-200 dark:border-red-900/60 bg-red-50/20 dark:bg-red-950/10': plate.status === 'OCR_FAILED'
+                                             }">
+                                            
+                                            <!-- Plate Top Row: Status badge & State chip -->
+                                            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                                                <div class="flex items-center space-x-2">
+                                                    <!-- Status Badge with Icon -->
+                                                    <div class="relative group/badge">
+                                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold gap-1.5 cursor-help"
+                                                              :class="{
+                                                                  'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300': plate.status === 'ACCEPTED',
+                                                                  'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300': plate.status === 'NEEDS_REVIEW',
+                                                                  'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300': plate.status === 'LOW_RESOLUTION',
+                                                                  'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300': plate.status === 'OCR_FAILED'
+                                                              }">
+                                                            <!-- Icons -->
+                                                            <template x-if="plate.status === 'ACCEPTED'">
+                                                                <svg class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                                            </template>
+                                                            <template x-if="plate.status === 'NEEDS_REVIEW'">
+                                                                <svg class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                                            </template>
+                                                            <template x-if="plate.status === 'LOW_RESOLUTION'">
+                                                                <svg class="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+                                                            </template>
+                                                            <template x-if="plate.status === 'OCR_FAILED'">
+                                                                <svg class="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                            </template>
+                                                            <span x-text="plate.status"></span>
+                                                        </span>
+                                                        <!-- Status Tooltip -->
+                                                        <div class="absolute bottom-full left-0 mb-1.5 px-2.5 py-1 bg-slate-900 text-white text-[11px] rounded shadow-lg whitespace-nowrap opacity-0 group-hover/badge:opacity-100 pointer-events-none transition-opacity z-20">
+                                                            <span x-text="getStatusTooltip(plate.status)"></span>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- State Chip -->
+                                                    <template x-if="plate.state_code">
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                                            <span x-text="plate.state_code"></span>
+                                                            <span x-show="plate.state_name" class="ml-1 text-slate-400" x-text="'• ' + plate.state_name"></span>
+                                                        </span>
+                                                    </template>
+                                                </div>
+
+                                                <span class="text-xs font-mono text-slate-400" x-text="'Plate #' + plate.index"></span>
+                                            </div>
+
+                                            <!-- Plain English Reason directly under badge -->
+                                            <p class="text-xs text-slate-600 dark:text-slate-300 font-medium mt-2 flex items-center gap-1.5">
+                                                <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                <span x-text="plate.reason"></span>
+                                            </p>
+
+                                            <!-- Plate Main Display & Crops -->
+                                            <div class="mt-4 grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                                                <!-- Plate Large Number Box -->
+                                                <div class="sm:col-span-7 flex flex-col space-y-2">
+                                                    <div class="p-3 bg-white dark:bg-slate-950 rounded-xl border-2 border-slate-800 dark:border-slate-300 flex items-center justify-between shadow-inner">
+                                                        <div class="flex items-center space-x-2">
+                                                            <div class="w-2.5 h-8 bg-blue-700 rounded-sm flex items-center justify-center text-[7px] text-white font-bold leading-none py-0.5">
+                                                                IND
+                                                            </div>
+                                                            <span class="font-mono font-extrabold text-xl md:text-2xl plate-font tracking-wider text-slate-950 dark:text-white"
+                                                                  x-text="plate.text ? plate.text : 'No text read'"></span>
+                                                        </div>
+                                                        <!-- Copy Button -->
+                                                        <button type="button" @click="copyText(plate.text, imgIdx, pIdx)"
+                                                                x-show="plate.text"
+                                                                class="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition shrink-0"
+                                                                aria-label="Copy plate text">
+                                                            <span x-text="copiedIndex === (imgIdx + '-' + pIdx) ? 'Copied!' : 'Copy'"></span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Crops (Original + Deskewed Side by Side) -->
+                                                <div class="sm:col-span-5 flex items-center space-x-2">
+                                                    <!-- Raw Crop -->
+                                                    <div class="flex-1 text-center">
+                                                        <div class="relative bg-slate-100 dark:bg-slate-850 rounded-lg border border-slate-200 dark:border-slate-800 p-1 flex items-center justify-center h-16 overflow-hidden">
+                                                            <img :src="plate.crop_url" alt="Cropped plate" class="max-h-full max-w-full object-contain rounded">
+                                                        </div>
+                                                        <span class="text-[10px] text-slate-400 font-medium mt-0.5 block">Original Crop</span>
+                                                    </div>
+                                                    <!-- Deskewed Crop -->
+                                                    <div class="flex-1 text-center">
+                                                        <div class="relative bg-slate-100 dark:bg-slate-850 rounded-lg border border-slate-200 dark:border-slate-800 p-1 flex items-center justify-center h-16 overflow-hidden">
+                                                            <img :src="plate.deskewed_url" alt="Deskewed plate" class="max-h-full max-w-full object-contain rounded">
+                                                        </div>
+                                                        <span class="text-[10px] text-brand-600 dark:text-brand-400 font-medium mt-0.5 block">Deskewed</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Confidence Bars with Tooltip -->
+                                            <div class="mt-4 pt-3 border-t border-slate-200/50 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <!-- Detection Confidence -->
+                                                <div>
+                                                    <div class="flex items-center justify-between text-xs mb-1">
+                                                        <span class="text-slate-500 font-medium">Detection confidence</span>
+                                                        <span class="font-mono font-bold text-slate-800 dark:text-slate-200" x-text="Math.round(plate.yolo_conf * 100) + '%'"></span>
+                                                    </div>
+                                                    <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                        <div class="h-full bg-brand-500 rounded-full transition-all" :style="'width: ' + (plate.yolo_conf * 100) + '%'"></div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Text OCR Confidence with Info Tooltip -->
+                                                <div class="relative group/conf">
+                                                    <div class="flex items-center justify-between text-xs mb-1">
+                                                        <div class="flex items-center space-x-1 cursor-help">
+                                                            <span class="text-slate-500 font-medium">Text confidence</span>
+                                                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                        </div>
+                                                        <span class="font-mono font-bold text-slate-800 dark:text-slate-200" x-text="Math.round(plate.ocr_conf * 100) + '%'"></span>
+                                                    </div>
+                                                    <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                        <div class="h-full bg-indigo-600 rounded-full transition-all" :style="'width: ' + (plate.ocr_conf * 100) + '%'"></div>
+                                                    </div>
+                                                    <!-- Info Tooltip -->
+                                                    <div class="absolute bottom-full right-0 mb-1 px-3 py-1.5 bg-slate-900 text-white text-[11px] rounded-lg shadow-xl max-w-xs opacity-0 group-hover/conf:opacity-100 pointer-events-none transition-opacity z-20">
+                                                        Confidence alone does not mean the text is correct. The status uses format and agreement checks.
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Expandable "How it was read" panel -->
+                                            <div class="mt-4" x-data="{ expanded: false }">
+                                                <button type="button" @click="expanded = !expanded"
+                                                        class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center space-x-1 focus:outline-none"
+                                                        aria-expanded="false" :aria-expanded="expanded.toString()">
+                                                    <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-90': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                                                    <span x-text="expanded ? 'Hide reading breakdown' : 'How it was read (variant breakdown)'"></span>
+                                                </button>
+
+                                                <div x-show="expanded" x-cloak class="mt-3 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                                                    <table class="w-full text-left text-xs">
+                                                        <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
+                                                            <tr>
+                                                                <th class="p-2">Variant</th>
+                                                                <th class="p-2">Recognized Text</th>
+                                                                <th class="p-2">Format Valid</th>
+                                                                <th class="p-2">Status</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                                                            <template x-for="(v, vIdx) in (plate.variants || [])" :key="vIdx">
+                                                                <tr :class="{ 'bg-brand-50/40 dark:bg-brand-950/20 font-semibold': v.used }">
+                                                                    <td class="p-2 font-mono text-[11px] text-slate-700 dark:text-slate-300">
+                                                                        <span x-text="v.name"></span>
+                                                                        <span x-show="v.used" class="ml-1 text-[10px] px-1 py-0.5 rounded bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300 font-bold">CHOSEN</span>
+                                                                    </td>
+                                                                    <td class="p-2 font-mono" x-text="v.text || '—'"></td>
+                                                                    <td class="p-2">
+                                                                        <span :class="v.valid ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-400'"
+                                                                              x-text="v.valid ? 'Yes' : 'No'"></span>
+                                                                    </td>
+                                                                    <td class="p-2 text-[11px] text-slate-400" x-text="v.used ? 'Selected' : 'Candidate'"></td>
+                                                                </tr>
+                                                            </template>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            <!-- Bottom Actions -->
+                                            <div class="mt-3 pt-2 flex items-center justify-end space-x-3 text-xs">
+                                                <a :href="plate.crop_url" download class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                                    Download crop
+                                                </a>
+                                            </div>
+
+                                        </div>
+                                    </template>
+                                </div>
                             </div>
                         </div>
-                    `;
-                });
-            }
+                    </article>
+                </template>
+            </section>
 
-            card.innerHTML = html + detectionsHtml + `</div>`;
-            allResultsContainer.appendChild(card);
-            card.scrollIntoView({ behavior: 'smooth' });
-        }
+        </main>
+    </div>
 
-        clearBtn.addEventListener('click', () => {
-            fileInput.value = '';
-            selectedFiles = [];
-            allResultsContainer.innerHTML = '';
-            messageEl.classList.remove('show');
-            updateSelectionUI();
-        });
+    <!-- Zoom Modal -->
+    <div x-show="zoomModalOpen" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+         @click.self="closeZoomModal()">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800"
+             role="dialog" aria-modal="true">
+            <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span class="text-sm font-bold text-slate-900 dark:text-white" x-text="'Zoom View: ' + zoomImageTitle"></span>
+                <div class="flex items-center space-x-2">
+                    <button type="button" @click="zoomScale = Math.max(0.5, zoomScale - 0.25)" class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200" aria-label="Zoom out">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                    </button>
+                    <span class="text-xs font-mono text-slate-500 w-12 text-center" x-text="Math.round(zoomScale * 100) + '%'"></span>
+                    <button type="button" @click="zoomScale = Math.min(3, zoomScale + 0.25)" class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200" aria-label="Zoom in">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    </button>
+                    <button type="button" @click="zoomScale = 1" class="px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Reset</button>
+                    <button type="button" @click="closeZoomModal()" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white" aria-label="Close modal">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="p-4 overflow-auto flex-1 flex items-center justify-center bg-slate-950 min-h-[300px]">
+                <img :src="zoomImageUrl" :alt="zoomImageTitle"
+                     class="max-w-none transition-transform duration-150 rounded"
+                     :style="'transform: scale(' + zoomScale + ');'">
+            </div>
+            <div class="px-5 py-2 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 flex justify-between">
+                <span>Press <strong>Esc</strong> to close</span>
+                <a :href="zoomImageUrl" download class="text-brand-600 dark:text-brand-400 hover:underline">Download full resolution</a>
+            </div>
+        </div>
+    </div>
 
-        function showMessage(text, type) {
-            messageEl.textContent = text;
-            messageEl.className = 'message show ' + type;
-        }
+    <!-- Alpine.js Application Logic -->
+    <script>
+        function anprApp() {
+            return {
+                darkMode: localStorage.getItem('anpr_theme') === 'dark' || 
+                          (!('anpr_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches),
+                mobileMenuOpen: false,
+                dragOver: false,
+                isProcessing: false,
+                errorMessage: '',
+                selectedFiles: [],
+                batchResult: null,
+                copiedIndex: null,
 
-        function escapeHtml(str) {
-            if (!str) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
+                // Zoom modal state
+                zoomModalOpen: false,
+                zoomImageUrl: '',
+                zoomImageTitle: '',
+                zoomScale: 1,
+
+                disabledNavItems: [
+                    {
+                        name: 'Review Queue',
+                        icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>'
+                    },
+                    {
+                        name: 'History',
+                        icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+                    },
+                    {
+                        name: 'Dashboard',
+                        icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>'
+                    },
+                    {
+                        name: 'Settings',
+                        icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>'
+                    }
+                ],
+
+                toggleDarkMode() {
+                    this.darkMode = !this.darkMode;
+                    localStorage.setItem('anpr_theme', this.darkMode ? 'dark' : 'light');
+                },
+
+                handleFileSelect(event) {
+                    const files = Array.from(event.target.files);
+                    this.addFiles(files);
+                    event.target.value = '';
+                },
+
+                handleDrop(event) {
+                    this.dragOver = false;
+                    if (event.dataTransfer && event.dataTransfer.files) {
+                        this.addFiles(Array.from(event.dataTransfer.files));
+                    }
+                },
+
+                handlePaste(event) {
+                    if (event.clipboardData && event.clipboardData.items) {
+                        const files = [];
+                        for (let item of event.clipboardData.items) {
+                            if (item.type.indexOf('image') !== -1) {
+                                const blob = item.getAsFile();
+                                if (blob) {
+                                    files.push(new File([blob], 'pasted_image_' + Date.now() + '.png', { type: blob.type }));
+                                }
+                            }
+                        }
+                        if (files.length > 0) {
+                            this.addFiles(files);
+                        }
+                    }
+                },
+
+                addFiles(newFiles) {
+                    this.errorMessage = '';
+                    const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+                    const maxSize = 10 * 1024 * 1024; // 10MB
+
+                    for (let f of newFiles) {
+                        if (this.selectedFiles.length >= 10) {
+                            this.errorMessage = 'Maximum 10 files allowed per request.';
+                            break;
+                        }
+                        const ext = f.name.split('.').pop().toLowerCase();
+                        if (!allowedExts.includes(ext)) {
+                            this.errorMessage = `File "${f.name}" has invalid format. Only JPG, PNG, WEBP allowed.`;
+                            continue;
+                        }
+                        if (f.size > maxSize) {
+                            this.errorMessage = `File "${f.name}" exceeds 10 MB limit.`;
+                            continue;
+                        }
+                        // Create thumbnail preview
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.selectedFiles.push({
+                                file: f,
+                                name: f.name,
+                                size: f.size,
+                                preview: e.target.result
+                            });
+                        };
+                        reader.readAsDataURL(f);
+                    }
+                },
+
+                removeFile(index) {
+                    this.selectedFiles.splice(index, 1);
+                },
+
+                clearAllFiles() {
+                    this.selectedFiles = [];
+                    this.errorMessage = '';
+                },
+
+                formatFileSize(bytes) {
+                    if (!bytes) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                },
+
+                async loadSample(filename, label) {
+                    try {
+                        this.errorMessage = '';
+                        const resp = await fetch('/static/samples/' + filename);
+                        if (!resp.ok) throw new Error('Sample file not found on server');
+                        const blob = await resp.blob();
+                        const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+                        this.selectedFiles = [{
+                            file: file,
+                            name: filename,
+                            size: file.size,
+                            preview: URL.createObjectURL(blob)
+                        }];
+                        // Trigger detection automatically
+                        await this.startDetection();
+                    } catch (err) {
+                        this.errorMessage = 'Could not load sample: ' + err.message;
+                    }
+                },
+
+                async startDetection() {
+                    if (this.selectedFiles.length === 0 || this.isProcessing) return;
+                    this.isProcessing = true;
+                    this.errorMessage = '';
+
+                    try {
+                        const formData = new FormData();
+                        for (let item of this.selectedFiles) {
+                            formData.append('images', item.file);
+                        }
+
+                        const resp = await fetch('/api/detect', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const data = await resp.json();
+                        if (!resp.ok) {
+                            throw new Error(data.error || 'Server error occurred during processing.');
+                        }
+
+                        this.batchResult = data;
+                    } catch (err) {
+                        this.errorMessage = err.message;
+                    } finally {
+                        this.isProcessing = false;
+                    }
+                },
+
+                copyText(text, imgIdx, pIdx) {
+                    if (!text) return;
+                    navigator.clipboard.writeText(text).then(() => {
+                        this.copiedIndex = imgIdx + '-' + pIdx;
+                        setTimeout(() => {
+                            if (this.copiedIndex === (imgIdx + '-' + pIdx)) {
+                                this.copiedIndex = null;
+                            }
+                        }, 1500);
+                    });
+                },
+
+                getStatusTooltip(status) {
+                    switch (status) {
+                        case 'ACCEPTED':
+                            return 'Valid Indian plate format confirmed with cross-variant agreement.';
+                        case 'NEEDS_REVIEW':
+                            return 'Requires human verification due to single variant, temporary plate, or format warning.';
+                        case 'LOW_RESOLUTION':
+                            return 'Plate bounding box is narrower than 80px, too small for reliable reading.';
+                        case 'OCR_FAILED':
+                            return 'No readable text lines detected on the plate area.';
+                        default:
+                            return 'Status evaluation pending.';
+                    }
+                },
+
+                openZoomModal(url, title) {
+                    this.zoomImageUrl = url;
+                    this.zoomImageTitle = title;
+                    this.zoomScale = 1;
+                    this.zoomModalOpen = true;
+                },
+
+                closeZoomModal() {
+                    this.zoomModalOpen = false;
+                },
+
+                retryImage(name) {
+                    this.startDetection();
+                }
+            };
         }
     </script>
 </body>
